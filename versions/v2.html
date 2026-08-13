@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design Mode — One-Lane Track Editor</title>
+<style>
+  :root{
+    --paper:#E7E1D2;
+    --paper-2:#D8D1BE;
+    --ink:#191713;
+    --ink-2:#5C574B;
+    --plate:#C0271B;
+    --sky:#5C94FC;
+    --amber:#F0A818;
+
+    --display:"Arial Black","Helvetica Neue",Impact,sans-serif;
+    --util:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper-2);color:var(--ink);
+    font-family:var(--util);font-size:13px;line-height:1.45;padding:16px;
+    background-image:radial-gradient(rgba(25,23,19,.055) 1px,transparent 1px);
+    background-size:3px 3px;
+  }
+  .sheet{
+    max-width:1240px;margin:0 auto;background:var(--paper);
+    border:3px solid var(--ink);box-shadow:6px 6px 0 rgba(25,23,19,.22);
+  }
+
+  header{
+    display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+    padding:10px 14px;border-bottom:3px solid var(--ink);
+    background:var(--plate);color:var(--paper);
+  }
+  h1{font-family:var(--display);font-size:19px;letter-spacing:.14em;text-transform:uppercase;margin:0}
+  .sub{font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.85}
+  header .spacer{flex:1}
+  #trackName{
+    font-family:var(--util);font-size:12px;background:var(--paper);color:var(--ink);
+    border:2px solid var(--ink);padding:3px 6px;width:180px;
+  }
+  #trackName:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+
+  .body{display:grid;grid-template-columns:206px 1fr}
+  @media (max-width:800px){ .body{grid-template-columns:1fr} }
+
+  .palette{border-right:3px solid var(--ink);padding:10px}
+  @media (max-width:800px){ .palette{border-right:0;border-bottom:3px solid var(--ink)} }
+  .eyebrow{
+    font-family:var(--display);font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--ink-2);margin:0 0 7px;
+  }
+
+  /* ---- layer switch: two stacked plates, the front one raised ---- */
+  .layers{display:flex;gap:0;margin-bottom:14px}
+  .layers button{
+    flex:1;font-family:var(--display);font-size:10px;letter-spacing:.1em;
+    text-transform:uppercase;padding:8px 4px;cursor:pointer;
+    background:var(--paper-2);color:var(--ink-2);
+    border:2px solid var(--ink);border-right-width:0;
+  }
+  .layers button:last-child{border-right-width:2px}
+  .layers button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .layers button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .piece{
+    display:flex;align-items:center;gap:8px;width:100%;
+    background:transparent;border:2px solid transparent;
+    padding:3px 5px;margin-bottom:2px;cursor:pointer;text-align:left;
+    font-family:var(--util);font-size:12px;color:var(--ink);
+  }
+  .piece:hover{background:var(--paper-2)}
+  .piece[aria-pressed="true"]{border-color:var(--plate);background:#fff}
+  .piece:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+  .piece .num{font-family:var(--display);font-size:12px;width:14px;color:var(--plate)}
+  .piece canvas{
+    image-rendering:pixelated;width:40px;height:34px;
+    background:var(--sky);border:1px solid var(--ink);flex:none;
+  }
+  .piece .nm{flex:1;text-transform:uppercase;letter-spacing:.05em}
+  .piece .sz{color:var(--ink-2);font-size:10px}
+
+  .stage{padding:10px 12px 12px}
+  .readout{
+    display:flex;gap:14px;flex-wrap:wrap;align-items:center;
+    font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-2);margin-bottom:7px;
+  }
+  .readout b{color:var(--ink);font-weight:400}
+  .zoom{margin-left:auto;display:flex;gap:4px;align-items:center}
+  .zoom button{
+    font-family:var(--util);font-size:11px;padding:2px 8px;cursor:pointer;
+    background:var(--paper);border:2px solid var(--ink);color:var(--ink);
+  }
+  .zoom button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .zoom button:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+
+  #view{
+    display:block;width:100%;image-rendering:pixelated;
+    border:3px solid var(--ink);background:var(--sky);
+    cursor:crosshair;touch-action:none;
+  }
+  #view:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .ruler-wrap{margin-top:10px}
+  #ruler{
+    display:block;width:100%;height:40px;image-rendering:pixelated;
+    border:2px solid var(--ink);background:var(--paper-2);cursor:pointer;
+  }
+  #ruler:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+  .ruler-legend{
+    display:flex;justify-content:space-between;
+    font-size:10px;letter-spacing:.12em;color:var(--ink-2);margin-top:3px;
+  }
+
+  .controls{
+    display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+    margin-top:12px;padding-top:10px;border-top:2px solid var(--ink);
+  }
+  button.act{
+    font-family:var(--display);font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;padding:7px 11px;cursor:pointer;
+    background:var(--paper);color:var(--ink);border:2px solid var(--ink);
+    box-shadow:2px 2px 0 var(--ink);
+  }
+  button.act:hover{background:var(--amber)}
+  button.act:active{transform:translate(2px,2px);box-shadow:none}
+  button.act:focus-visible{outline:3px solid var(--plate);outline-offset:2px}
+  button.act.danger{color:var(--plate)}
+
+  .keys{
+    margin-top:10px;padding-top:8px;border-top:1px dashed var(--ink-2);
+    font-size:11px;color:var(--ink-2);display:flex;gap:13px;flex-wrap:wrap;
+  }
+  kbd{font-family:var(--util);font-size:10px;background:var(--ink);color:var(--paper);padding:1px 5px;border-radius:2px}
+
+  #status{min-height:1.4em;margin-top:8px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--plate)}
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important}
+    button.act:active{transform:none}
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <h1>Design Mode</h1>
+    <span class="sub">One lane · two planes · 16px pieces</span>
+    <span class="spacer"></span>
+    <label class="sub" for="trackName">Track</label>
+    <input id="trackName" value="TRACK 01" maxlength="24" aria-label="Track name">
+  </header>
+
+  <div class="body">
+
+    <nav class="palette" aria-label="Piece select">
+      <p class="eyebrow">Plane</p>
+      <div class="layers" role="group" aria-label="Active plane">
+        <button id="btnBg" type="button" aria-pressed="false">Back</button>
+        <button id="btnFg" type="button" aria-pressed="true">Front</button>
+      </div>
+
+      <p class="eyebrow">Piece select</p>
+      <div id="paletteList"></div>
+
+      <p class="eyebrow" style="margin-top:14px">Rules</p>
+      <p style="font-size:11px;color:var(--ink-2);margin:0">
+        Pieces claim their centre column only. Wings overlap freely; the last
+        one placed sits on top. Erasing peels the topmost piece under the
+        cursor, one click at a time.
+      </p>
+    </nav>
+
+    <main class="stage">
+      <div class="readout">
+        <span>Col <b id="rCol">—</b></span>
+        <span>Row <b id="rRow">—</b></span>
+        <span>Plane <b id="rLayer">Front</b></span>
+        <span>Holding <b id="rPiece">Brick</b></span>
+        <span>Back <b id="rBg">0</b> · Front <b id="rFg">0</b></span>
+        <span class="zoom">
+          <span>View</span>
+          <button type="button" data-cols="12" aria-pressed="false">12</button>
+          <button type="button" data-cols="16" aria-pressed="true">16</button>
+          <button type="button" data-cols="24" aria-pressed="false">24</button>
+          <button type="button" data-cols="32" aria-pressed="false">32</button>
+        </span>
+      </div>
+
+      <canvas id="view" width="256" height="192" tabindex="0"
+              aria-label="Track editor. Arrow keys move the cursor, number keys pick a piece, Space places, Tab switches plane."></canvas>
+
+      <div class="ruler-wrap">
+        <canvas id="ruler" width="256" height="40" tabindex="0"
+                aria-label="Whole track overview, both planes. Click to jump to a column."></canvas>
+        <div class="ruler-legend">
+          <span>Start 0</span><span>Back plane above · front plane below</span><span id="rulerEnd">End 255</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="act" id="btnExport">Export JSON</button>
+        <button class="act" id="btnImport">Import JSON</button>
+        <button class="act" id="btnPng">Export PNG</button>
+        <button class="act" id="btnGround">Reset ground</button>
+        <button class="act danger" id="btnClearLayer">Clear plane</button>
+        <button class="act danger" id="btnClear">Clear all</button>
+        <input type="file" id="fileIn" accept="application/json" hidden>
+      </div>
+
+      <div class="keys">
+        <span><kbd>1</kbd>–<kbd>8</kbd> piece</span>
+        <span><kbd>0</kbd> eraser</span>
+        <span><kbd>Tab</kbd> swap plane</span>
+        <span><kbd>←</kbd><kbd>→</kbd> move · <kbd>Shift</kbd> ×8</span>
+        <span><kbd>Space</kbd> place · <kbd>X</kbd> erase</span>
+        <span>drag paints · right-click erases</span>
+      </div>
+
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+   ONE-LANE DESIGN MODE — v2
+
+   Changes from v1:
+   · Two planes (back / front) instead of one grid.
+   · Placement model swapped from an occupancy grid to a display list.
+     A piece claims one cell — its centre column at its base row — and
+     nothing else. Wings overlap freely. Draw order is placement order,
+     so the last piece placed is on top.
+   · Erase peels the topmost piece whose footprint covers the cursor.
+   · View width is adjustable (12–32 columns).
+
+   No external assets, no localStorage, no dependencies.
+   =================================================================== */
+
+/* ---------- 1. CONSTANTS ---------- */
+const TILE = 16;
+const COLS = 256;
+const ROWS = 12;
+const GROUND_ROW = 10;
+
+/* ---------- 2. SPRITE FACTORY ---------- */
+const C = {
+  grassLo:'#2E7A22', grassMid:'#3FA02C', grassHi:'#63CC42',
+  dirtHi:'#D9915A',  dirtMid:'#B06A2E',  dirtLo:'#7A4416',
+  brickHi:'#E08A50', brickMid:'#C0561A', brickLo:'#7E3308', mortar:'#141010',
+  leafHi:'#63CC42',  leafMid:'#2E9E30',  leafLo:'#1C6B22',
+  bark:'#8A5A22',    barkLo:'#5C3A12',
+  hillHi:'#3FA02C',  hillMid:'#2E8424',  hillLo:'#1E5C18',
+  cloudHi:'#FFFFFF', cloudLo:'#C8D8F8', cloudEdge:'#9CB4EC'
+};
+
+function surface(w,h){
+  const c = document.createElement('canvas');
+  c.width=w; c.height=h;
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = false;
+  return {c,x};
+}
+const px = (x,col,X,Y,W=1,H=1)=>{ x.fillStyle=col; x.fillRect(X,Y,W,H); };
+
+/* Silhouette from overlapping circles: returns the topmost y at column X,
+   or Infinity if no lump covers it. Gives clean pixel blobs for bushes,
+   canopies, clouds and hills without hand-typing pixel tables. */
+function lumpTop(X, lumps){
+  let top = Infinity;
+  for(const [cx,cy,r] of lumps){
+    const dx = X - cx;
+    if(Math.abs(dx) <= r){
+      const y = cy - Math.sqrt(r*r - dx*dx);
+      if(y < top) top = y;
+    }
+  }
+  return top;
+}
+function fillLumps(x, W, baseline, lumps, hi, mid, lo, rimHi=2, rimLo=2){
+  for(let X=0; X<W; X++){
+    const t = lumpTop(X, lumps);
+    if(!isFinite(t)) continue;
+    const top = Math.round(t);
+    if(top >= baseline) continue;
+    px(x, mid, X, top, 1, baseline-top);
+    if(rimHi) px(x, hi, X, top, 1, Math.min(rimHi, baseline-top));
+    if(rimLo) px(x, lo, X, baseline-rimLo, 1, rimLo);
+  }
+}
+
+/* -- terrain ------------------------------------------------------ */
+function makeGrass(){
+  const {c,x} = surface(TILE,TILE);
+  px(x,C.dirtMid,0,0,16,16);
+  [[2,7],[9,6],[5,11],[12,10],[7,14],[1,12],[13,4]].forEach(([a,b])=>px(x,C.dirtLo,a,b,2,1));
+  [[4,5],[11,8],[2,9],[8,12]].forEach(([a,b])=>px(x,C.dirtHi,a,b,2,1));
+  px(x,C.grassMid,0,0,16,4);
+  px(x,C.grassHi,0,0,16,2);
+  for(let i=0;i<16;i+=2) px(x,C.grassHi,i,2,1,1);
+  px(x,C.grassLo,0,4,16,1);
+  for(let i=1;i<16;i+=4) px(x,C.grassLo,i,3,1,1);
+  return c;
+}
+function makeDirt(){
+  const {c,x} = surface(TILE,TILE);
+  px(x,C.dirtMid,0,0,16,16);
+  [[2,3],[10,2],[6,7],[13,9],[3,12],[9,13]].forEach(([a,b])=>px(x,C.dirtLo,a,b,3,1));
+  [[5,4],[12,6],[1,9],[7,11]].forEach(([a,b])=>px(x,C.dirtHi,a,b,2,1));
+  return c;
+}
+function makeBrick(){
+  const {c,x} = surface(TILE,TILE);
+  px(x,C.mortar,0,0,16,16);
+  const course=(y,seam)=>{
+    px(x,C.brickMid,0,y+1,16,3);
+    px(x,C.brickHi,0,y+1,16,1);
+    px(x,C.brickLo,0,y+3,16,1);
+    if(seam>=0 && seam<16) px(x,C.mortar,seam,y+1,1,3);
+  };
+  course(0,8); course(4,0); course(8,8); course(12,0);
+  return c;
+}
+
+/* -- decor: 3 wide x 1 tall bush ---------------------------------- */
+function makeBush(){
+  const W=48,H=16, {c,x}=surface(W,H);
+  fillLumps(x,W,H,[[9,16,9],[24,15,12],[39,16,9]],C.leafHi,C.leafMid,C.leafLo,2,2);
+  px(x,C.leafHi,5,10,4,1); px(x,C.leafHi,19,7,5,1); px(x,C.leafHi,35,10,4,1);
+  return c;
+}
+
+/* -- decor: 3 wide x 3 tall tree ---------------------------------- */
+function makeTree(){
+  const W=48,H=48, {c,x}=surface(W,H);
+  fillLumps(x,W,34,[[24,20,17],[11,24,11],[37,24,11]],C.leafHi,C.leafMid,C.leafLo,3,2);
+  px(x,C.leafHi,16,7,6,2); px(x,C.leafHi,8,17,5,2); px(x,C.leafHi,33,15,5,2);
+  px(x,C.bark,21,30,6,18);
+  px(x,C.barkLo,25,30,2,18);
+  px(x,C.barkLo,17,45,14,3);
+  px(x,C.bark,16,44,16,2);
+  return c;
+}
+
+/* -- decor: mounds ------------------------------------------------ */
+function makeMound(W,H){
+  const {c,x} = surface(W,H);
+  for(let X=0; X<W; X++){
+    const t = X/(W-1);
+    const top = Math.round(H - (H-2)*Math.pow(Math.sin(Math.PI*t), 0.62) - 1);
+    if(top >= H) continue;
+    px(x,C.hillMid,X,top,1,H-top);
+    px(x,C.hillHi,X,top,1,2);
+  }
+  px(x,C.hillLo,0,H-2,W,2);
+  const spots = W>60 ? [[16,H-16],[46,H-22],[62,H-12],[30,H-30]]
+                     : [[10,H-12],[30,H-16],[20,H-22]];
+  spots.forEach(([a,b])=>px(x,C.hillLo,a,b,4,1));
+  return c;
+}
+
+/* -- background: cloud -------------------------------------------- */
+function makeCloud(){
+  const W=48,H=32, {c,x}=surface(W,H);
+  fillLumps(x,W,26,[[24,17,12],[11,21,8],[37,21,8]],C.cloudHi,C.cloudHi,C.cloudLo,0,3);
+  px(x,C.cloudEdge,4,25,40,1);
+  px(x,C.cloudLo,10,22,8,1); px(x,C.cloudLo,30,22,8,1);
+  return c;
+}
+
+/* ---------- 3. PIECE TABLE ----------
+   `w`/`h` are footprint in tiles. The anchor cell is the centre column
+   of the bottom row: anchorCol = (w-1)>>1, anchorRow = h-1. */
+const PIECES = [
+  {id:'GRASS', key:'1', name:'Grass',  w:1,h:1, tint:'#3FA02C', img:makeGrass()},
+  {id:'DIRT',  key:'2', name:'Dirt',   w:1,h:1, tint:'#B06A2E', img:makeDirt()},
+  {id:'BRICK', key:'3', name:'Brick',  w:1,h:1, tint:'#C0561A', img:makeBrick()},
+  {id:'BUSH',  key:'4', name:'Bush',   w:3,h:1, tint:'#2E9E30', img:makeBush()},
+  {id:'TREE',  key:'5', name:'Tree',   w:3,h:3, tint:'#1C6B22', img:makeTree()},
+  {id:'HILL2', key:'6', name:'Mound',  w:3,h:2, tint:'#2E8424', img:makeMound(48,32)},
+  {id:'HILL3', key:'7', name:'Hill',   w:5,h:3, tint:'#1E5C18', img:makeMound(80,48)},
+  {id:'CLOUD', key:'8', name:'Cloud',  w:3,h:2, tint:'#DCE6FF', img:makeCloud()},
+];
+const BY_ID  = Object.fromEntries(PIECES.map(p=>[p.id,p]));
+const BY_KEY = Object.fromEntries(PIECES.map(p=>[p.key,p]));
+
+const anchorCol = p => (p.w-1) >> 1;     // centre column, left-biased on even widths
+const anchorRow = p => p.h - 1;          // base row
+
+/* ---------- 4. TRACK MODEL ----------
+   Display lists, not grids. An instance is {id, ax, ay}: the piece id
+   and the cell its centre column / base row occupies. Array order is
+   z-order. One instance per anchor cell per plane — re-placing on the
+   same anchor replaces, which keeps drag-painting from stacking
+   thousands of duplicates. */
+
+const track = { bg: [], fg: [], name:'TRACK 01' };
+const PLANES = ['bg','fg'];
+
+function originOf(inst){
+  const p = BY_ID[inst.id];
+  return { ox: inst.ax - anchorCol(p), oy: inst.ay - anchorRow(p), p };
+}
+function covers(inst, col, row){
+  const {ox,oy,p} = originOf(inst);
+  return col >= ox && col < ox+p.w && row >= oy && row < oy+p.h;
+}
+
+function placePiece(plane, id, ax, ay){
+  const p = BY_ID[id];
+  if(!p) return false;
+  // clamp so the footprint stays on the track
+  ax = Math.max(anchorCol(p), Math.min(COLS-1-(p.w-1-anchorCol(p)), ax));
+  ay = Math.max(anchorRow(p), Math.min(ROWS-1, ay));
+  const list = track[plane];
+  const dup = list.findIndex(i => i.ax===ax && i.ay===ay);
+  if(dup >= 0){
+    if(list[dup].id === id) return false;    // nothing changed; skip the redraw
+    list.splice(dup,1);
+  }
+  list.push({id, ax, ay});
+  return true;
+}
+
+/* Peel: topmost instance whose footprint covers the cell. */
+function erasePiece(plane, col, row){
+  const list = track[plane];
+  for(let i=list.length-1; i>=0; i--){
+    if(covers(list[i], col, row)){ list.splice(i,1); return true; }
+  }
+  return false;
+}
+
+function layGround(){
+  for(let c=0;c<COLS;c++){
+    placePiece('fg','GRASS', c, GROUND_ROW);
+    placePiece('fg','DIRT',  c, GROUND_ROW+1);
+  }
+}
+
+/* ---------- 5. EDITOR STATE ---------- */
+const ed = {
+  camCol:0, curCol:0, curRow:GROUND_ROW-1,
+  viewCols:16,
+  plane:'fg',
+  held:'BRICK',            // null = eraser
+  painting:false, paintErase:false
+};
+
+/* ---------- 6. RENDER ---------- */
+const view = document.getElementById('view');
+const vx = view.getContext('2d');
+vx.imageSmoothingEnabled = false;
+
+const ruler = document.getElementById('ruler');
+const rx = ruler.getContext('2d');
+rx.imageSmoothingEnabled = false;
+
+function setViewCols(n){
+  ed.viewCols = n;
+  view.width = n*TILE;
+  view.style.aspectRatio = `${n*TILE} / ${ROWS*TILE}`;
+  vx.imageSmoothingEnabled = false;
+  document.querySelectorAll('.zoom button').forEach(b=>{
+    b.setAttribute('aria-pressed', String(+b.dataset.cols === n));
+  });
+  scrollTo(ed.camCol);
+}
+
+function drawPlane(plane, alpha){
+  const list = track[plane];
+  vx.globalAlpha = alpha;
+  const camL = ed.camCol, camR = ed.camCol + ed.viewCols;
+  for(const inst of list){
+    const {ox,oy,p} = originOf(inst);
+    if(ox+p.w <= camL || ox >= camR) continue;         // cull
+    vx.drawImage(p.img, (ox-camL)*TILE, oy*TILE);
+  }
+  vx.globalAlpha = 1;
+}
+
+function draw(){
+  vx.fillStyle = '#5C94FC';
+  vx.fillRect(0,0,view.width,view.height);
+
+  vx.fillStyle = 'rgba(255,255,255,0.09)';
+  vx.fillRect(0,(GROUND_ROW-2)*TILE,view.width,2*TILE);
+
+  vx.fillStyle = 'rgba(0,0,0,0.06)';
+  for(let c=0;c<=ed.viewCols;c++) vx.fillRect(c*TILE,0,1,view.height);
+  for(let r=0;r<=ROWS;r++)        vx.fillRect(0,r*TILE,view.width,1);
+
+  // inactive plane is dimmed so you always know which one you are editing
+  drawPlane('bg', ed.plane==='bg' ? 1 : 0.5);
+  drawPlane('fg', ed.plane==='fg' ? 1 : 0.5);
+
+  drawCursor();
+  drawRuler();
+  syncReadout();
+}
+
+function drawCursor(){
+  const p = ed.held ? BY_ID[ed.held] : null;
+  const w = p ? p.w : 1, h = p ? p.h : 1;
+  const ox = ed.curCol - (p ? anchorCol(p) : 0);
+  const oy = ed.curRow - (p ? anchorRow(p) : 0);
+  const sx = (ox - ed.camCol)*TILE, sy = oy*TILE;
+
+  if(p){                                   // ghost preview of the real sprite
+    vx.globalAlpha = 0.45;
+    vx.drawImage(p.img, sx, sy);
+    vx.globalAlpha = 1;
+  }
+  vx.strokeStyle = p ? '#F0A818' : '#C0271B';
+  vx.lineWidth = 1;
+  vx.strokeRect(sx+0.5, sy+0.5, w*TILE-1, h*TILE-1);
+
+  // the anchor cell — the one cell the piece actually claims
+  const ax = (ed.curCol - ed.camCol)*TILE, ay = ed.curRow*TILE;
+  vx.strokeStyle = '#C0271B';
+  vx.strokeRect(ax+1.5, ay+1.5, TILE-3, TILE-3);
+}
+
+/* Ruler: back plane silhouette above the midline, front plane below. */
+function drawRuler(){
+  rx.fillStyle = '#D8D1BE';
+  rx.fillRect(0,0,ruler.width,ruler.height);
+  rx.fillStyle = 'rgba(25,23,19,0.18)';
+  rx.fillRect(0,19,COLS,1);
+
+  const topmost = plane => {
+    const out = new Array(COLS).fill(null);
+    for(const inst of track[plane]){
+      const {ox,oy,p} = originOf(inst);
+      for(let c=ox; c<ox+p.w; c++){
+        if(c<0||c>=COLS) continue;
+        if(out[c]===null || oy < out[c].row) out[c] = {row:oy, tint:p.tint};
+      }
+    }
+    return out;
+  };
+
+  const bg = topmost('bg'), fg = topmost('fg');
+  for(let c=0;c<COLS;c++){
+    if(bg[c]){
+      const hgt = Math.max(1, Math.round((1 - bg[c].row/ROWS)*15));
+      rx.fillStyle = bg[c].tint; rx.fillRect(c, 18-hgt, 1, hgt);
+    }
+    if(fg[c]){
+      const y = Math.round((fg[c].row/ROWS)*17);
+      rx.fillStyle = fg[c].tint; rx.fillRect(c, 21+y, 1, 18-y);
+    }
+  }
+
+  rx.fillStyle = 'rgba(25,23,19,0.3)';
+  for(let c=0;c<COLS;c+=16) rx.fillRect(c,18,1,3);
+
+  rx.fillStyle = '#C0271B';
+  rx.fillRect(ed.camCol, 0, ed.viewCols, 2);
+  rx.fillRect(ed.camCol, 38, ed.viewCols, 2);
+  rx.fillRect(ed.camCol, 0, 1, 40);
+  rx.fillRect(ed.camCol + ed.viewCols - 1, 0, 1, 40);
+  rx.fillStyle = '#F0A818';
+  rx.fillRect(ed.curCol, 2, 1, 36);
+}
+
+function syncReadout(){
+  document.getElementById('rCol').textContent   = ed.curCol;
+  document.getElementById('rRow').textContent   = ed.curRow;
+  document.getElementById('rLayer').textContent = ed.plane==='fg' ? 'Front' : 'Back';
+  document.getElementById('rPiece').textContent = ed.held ? BY_ID[ed.held].name : 'Eraser';
+  document.getElementById('rBg').textContent    = track.bg.length;
+  document.getElementById('rFg').textContent    = track.fg.length;
+}
+const say = m => { document.getElementById('status').textContent = m; };
+
+/* ---------- 7. PALETTE + PLANE UI ---------- */
+function buildPalette(){
+  const host = document.getElementById('paletteList');
+  const mk = (label,keyLabel,img,id,size)=>{
+    const b = document.createElement('button');
+    b.className='piece'; b.type='button';
+    b.dataset.id = id ?? '';
+    const n = document.createElement('span'); n.className='num'; n.textContent=keyLabel;
+    const cv = document.createElement('canvas'); cv.width=40; cv.height=34;
+    const cx = cv.getContext('2d'); cx.imageSmoothingEnabled=false;
+    if(img){
+      const s = Math.min(38/img.width, 32/img.height, 2);
+      const w = Math.round(img.width*s), h = Math.round(img.height*s);
+      cx.drawImage(img, Math.round((40-w)/2), 33-h, w, h);
+    }else{
+      cx.fillStyle='#C0271B'; cx.fillRect(10,15,20,4); cx.fillRect(18,7,4,20);
+      cx.fillStyle='#E7E1D2'; cx.fillRect(12,16,16,2);
+    }
+    const nm = document.createElement('span'); nm.className='nm'; nm.textContent=label;
+    const sz = document.createElement('span'); sz.className='sz'; sz.textContent=size;
+    b.append(n,cv,nm,sz);
+    b.onclick = ()=> selectPiece(id);
+    host.appendChild(b);
+  };
+  PIECES.forEach(p=>mk(p.name,p.key,p.img,p.id,`${p.w}×${p.h}`));
+  mk('Eraser','0',null,null,'peel');
+  selectPiece(ed.held);
+}
+function selectPiece(id){
+  ed.held = id;
+  document.querySelectorAll('.piece').forEach(b=>{
+    b.setAttribute('aria-pressed', String((b.dataset.id||null) === (id||null)));
+  });
+  say(id ? `Holding ${BY_ID[id].name}` : 'Holding eraser — click peels the top piece');
+  draw();
+}
+function setPlane(plane){
+  ed.plane = plane;
+  document.getElementById('btnBg').setAttribute('aria-pressed', String(plane==='bg'));
+  document.getElementById('btnFg').setAttribute('aria-pressed', String(plane==='fg'));
+  say(plane==='fg' ? 'Editing front plane' : 'Editing back plane');
+  draw();
+}
+document.getElementById('btnBg').onclick = ()=>setPlane('bg');
+document.getElementById('btnFg').onclick = ()=>setPlane('fg');
+
+/* ---------- 8. INPUT ---------- */
+function cellFromEvent(e){
+  const r = view.getBoundingClientRect();
+  const cx = Math.floor(((e.clientX-r.left)/r.width)  * ed.viewCols);
+  const cy = Math.floor(((e.clientY-r.top) /r.height) * ROWS);
+  return { col: ed.camCol + Math.max(0,Math.min(ed.viewCols-1,cx)),
+           row: Math.max(0,Math.min(ROWS-1,cy)) };
+}
+function stamp(col,row,erase){
+  const changed = (erase || !ed.held)
+    ? erasePiece(ed.plane, col, row)
+    : placePiece(ed.plane, ed.held, col, row);
+  if(changed) draw();
+}
+
+view.addEventListener('contextmenu', e=>e.preventDefault());
+view.addEventListener('pointerdown', e=>{
+  view.focus();
+  view.setPointerCapture(e.pointerId);
+  const {col,row} = cellFromEvent(e);
+  ed.curCol=col; ed.curRow=row;
+  ed.painting = true;
+  ed.paintErase = (e.button===2) || e.shiftKey;
+  stamp(col,row,ed.paintErase);
+  draw();
+});
+view.addEventListener('pointermove', e=>{
+  const {col,row} = cellFromEvent(e);
+  if(col===ed.curCol && row===ed.curRow) return;
+  ed.curCol=col; ed.curRow=row;
+  if(ed.painting) stamp(col,row,ed.paintErase);
+  draw();
+});
+const stopPaint = ()=>{ ed.painting=false; };
+view.addEventListener('pointerup', stopPaint);
+view.addEventListener('pointercancel', stopPaint);
+window.addEventListener('blur', stopPaint);
+
+function scrollTo(col){
+  ed.camCol = Math.max(0, Math.min(COLS - ed.viewCols, col));
+}
+function moveCursor(d){
+  ed.curCol = Math.max(0, Math.min(COLS-1, ed.curCol+d));
+  if(ed.curCol < ed.camCol) scrollTo(ed.curCol);
+  if(ed.curCol > ed.camCol + ed.viewCols - 1) scrollTo(ed.curCol - ed.viewCols + 1);
+}
+
+window.addEventListener('keydown', e=>{
+  if(e.target.tagName === 'INPUT') return;
+  const step = e.shiftKey ? 8 : 1;
+  switch(e.key){
+    case 'Tab':        setPlane(ed.plane==='fg' ? 'bg' : 'fg'); break;
+    case 'ArrowLeft':  moveCursor(-step); break;
+    case 'ArrowRight': moveCursor( step); break;
+    case 'ArrowUp':    ed.curRow = Math.max(0, ed.curRow-1); break;
+    case 'ArrowDown':  ed.curRow = Math.min(ROWS-1, ed.curRow+1); break;
+    case 'Home':       ed.curCol = 0; scrollTo(0); break;
+    case 'End':        ed.curCol = COLS-1; scrollTo(COLS); break;
+    case ' ': case 'Enter': stamp(ed.curCol, ed.curRow, false); break;
+    case 'x': case 'X': case 'Backspace': case 'Delete':
+      stamp(ed.curCol, ed.curRow, true); break;
+    case '0': selectPiece(null); return;
+    default:
+      if(BY_KEY[e.key]){ selectPiece(BY_KEY[e.key].id); return; }
+      return;
+  }
+  e.preventDefault();
+  draw();
+});
+
+ruler.addEventListener('pointerdown', e=>{
+  const r = ruler.getBoundingClientRect();
+  const col = Math.round(((e.clientX-r.left)/r.width)*COLS);
+  ed.curCol = Math.max(0, Math.min(COLS-1, col));
+  scrollTo(ed.curCol - Math.floor(ed.viewCols/2));
+  draw();
+});
+
+document.querySelectorAll('.zoom button').forEach(b=>{
+  b.onclick = ()=>{ setViewCols(+b.dataset.cols); draw(); };
+});
+
+/* ---------- 9. SAVE / LOAD ---------- */
+function serialize(){
+  const pack = plane => track[plane].map(i=>({p:i.id, x:i.ax, y:i.ay}));
+  return {
+    format:'onelane-design', version:2,
+    name: document.getElementById('trackName').value.trim() || 'UNTITLED',
+    cols:COLS, rows:ROWS, tile:TILE,
+    anchor:'centre-column-base-row',
+    layers:{ bg:pack('bg'), fg:pack('fg') }
+  };
+}
+
+/* v1 files stored a single flat list keyed on top-left origin, with a
+   different piece table. Converted best-effort; sizes changed, so the
+   result is close, not identical. */
+const V1_MAP = {GRASS:'GRASS', DIRT:'DIRT', BRICK:'BRICK', BUSH:'BUSH',
+                TREE:'TREE', HILL:'HILL2', HILLR:'HILL2'};
+const V1_SIZE = {GRASS:[1,1],DIRT:[1,1],BRICK:[1,1],BUSH:[1,1],TREE:[1,2],HILL:[2,2],HILLR:[2,2]};
+
+function deserialize(data){
+  if(!data || data.format !== 'onelane-design') throw new Error('Not a design file');
+  track.bg.length = 0; track.fg.length = 0;
+  let skipped = 0;
+
+  const add = (plane, id, ax, ay) => {
+    if(!BY_ID[id]){ skipped++; return; }
+    if(!placePiece(plane, id, ax|0, ay|0)) skipped++;
+  };
+
+  if(data.version === 2 && data.layers){
+    (data.layers.bg||[]).forEach(it => add('bg', it.p, it.x, it.y));
+    (data.layers.fg||[]).forEach(it => add('fg', it.p, it.x, it.y));
+  } else if(Array.isArray(data.pieces)){
+    for(const it of data.pieces){
+      const id = V1_MAP[it.p];
+      const size = V1_SIZE[it.p];
+      if(!id || !size){ skipped++; continue; }
+      const np = BY_ID[id];
+      // v1 origin (top-left) -> v2 anchor (centre column, base row)
+      add('fg', id, (it.x|0) + anchorCol(np), (it.y|0) + size[1] - 1);
+    }
+  } else {
+    throw new Error('No layers or pieces');
+  }
+
+  document.getElementById('trackName').value = (data.name||'UNTITLED').slice(0,24);
+  return skipped;
+}
+
+function download(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+const safeName = ()=> (document.getElementById('trackName').value||'track')
+  .replace(/[^A-Za-z0-9_-]+/g,'_').toLowerCase();
+
+document.getElementById('btnExport').onclick = ()=>{
+  const data = serialize();
+  const n = data.layers.bg.length + data.layers.fg.length;
+  download(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}), `${safeName()}.json`);
+  say(`Exported ${n} pieces`);
+};
+document.getElementById('btnImport').onclick = ()=> document.getElementById('fileIn').click();
+document.getElementById('fileIn').onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const skipped = deserialize(JSON.parse(await f.text()));
+    draw();
+    say(skipped ? `Loaded. ${skipped} pieces dropped.` : 'Loaded');
+  }catch(err){ say(`Import failed: ${err.message}`); }
+  e.target.value = '';
+};
+
+document.getElementById('btnPng').onclick = ()=>{
+  const {c,x} = surface(COLS*TILE, ROWS*TILE);
+  x.fillStyle='#5C94FC'; x.fillRect(0,0,c.width,c.height);
+  for(const plane of PLANES)
+    for(const inst of track[plane]){
+      const {ox,oy,p} = originOf(inst);
+      x.drawImage(p.img, ox*TILE, oy*TILE);
+    }
+  c.toBlob(b=>{ download(b, safeName()+'.png');
+    say(`Exported PNG ${COLS*TILE} × ${ROWS*TILE}`); });
+};
+
+document.getElementById('btnGround').onclick = ()=>{ layGround(); draw(); say('Ground relaid'); };
+document.getElementById('btnClearLayer').onclick = ()=>{
+  track[ed.plane].length = 0; draw();
+  say(`Cleared ${ed.plane==='fg'?'front':'back'} plane`);
+};
+document.getElementById('btnClear').onclick = ()=>{
+  track.bg.length=0; track.fg.length=0; draw(); say('Track cleared');
+};
+
+/* ---------- 10. BOOT ---------- */
+document.getElementById('rulerEnd').textContent = 'End ' + (COLS-1);
+setViewCols(16);
+buildPalette();
+layGround();
+setPlane('fg');
+draw();
+say('Ready. Tab swaps planes. Pieces claim only their centre column.');
+</script>
+</body>
+</html>

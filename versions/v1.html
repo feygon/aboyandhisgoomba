@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design Mode — One-Lane Track Editor</title>
+<style>
+  /* ---------------------------------------------------------------
+     Palette: NES instruction-booklet print (paper, ink, red plate)
+     wrapped around a true NES-blue playfield.
+     --------------------------------------------------------------- */
+  :root{
+    --paper:#E7E1D2;
+    --paper-2:#D8D1BE;
+    --ink:#191713;
+    --ink-2:#5C574B;
+    --plate:#C0271B;      /* booklet red plate */
+    --sky:#5C94FC;        /* NES sky */
+    --amber:#F0A818;
+    --rule:#191713;
+
+    --display:"Arial Black","Helvetica Neue",Impact,sans-serif;
+    --util:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper-2);
+    color:var(--ink);
+    font-family:var(--util);
+    font-size:13px;
+    line-height:1.45;
+    padding:16px;
+    /* faint paper tooth */
+    background-image:radial-gradient(rgba(25,23,19,.055) 1px,transparent 1px);
+    background-size:3px 3px;
+  }
+
+  .sheet{
+    max-width:1120px;margin:0 auto;
+    background:var(--paper);
+    border:3px solid var(--rule);
+    box-shadow:6px 6px 0 rgba(25,23,19,.22);
+  }
+
+  /* ---- masthead ------------------------------------------------- */
+  header{
+    display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+    padding:10px 14px;border-bottom:3px solid var(--rule);
+    background:var(--plate);color:var(--paper);
+  }
+  h1{
+    font-family:var(--display);font-size:19px;letter-spacing:.14em;
+    text-transform:uppercase;margin:0;
+  }
+  .sub{font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.85}
+  header .spacer{flex:1}
+  #trackName{
+    font-family:var(--util);font-size:12px;background:var(--paper);
+    color:var(--ink);border:2px solid var(--ink);padding:3px 6px;width:190px;
+  }
+  #trackName:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+
+  /* ---- body grid ------------------------------------------------ */
+  .body{display:grid;grid-template-columns:190px 1fr;}
+  @media (max-width:760px){ .body{grid-template-columns:1fr} }
+
+  /* ---- palette (Excitebike numbered piece select) ---------------- */
+  .palette{border-right:3px solid var(--rule);padding:10px}
+  @media (max-width:760px){ .palette{border-right:0;border-bottom:3px solid var(--rule)} }
+  .eyebrow{
+    font-family:var(--display);font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--ink-2);margin:0 0 8px;
+  }
+  .piece{
+    display:flex;align-items:center;gap:9px;width:100%;
+    background:transparent;border:2px solid transparent;
+    padding:4px 5px;margin-bottom:2px;cursor:pointer;text-align:left;
+    font-family:var(--util);font-size:12px;color:var(--ink);
+  }
+  .piece:hover{background:var(--paper-2)}
+  .piece[aria-pressed="true"]{border-color:var(--plate);background:#fff}
+  .piece:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+  .piece .num{
+    font-family:var(--display);font-size:12px;width:15px;color:var(--plate);
+  }
+  .piece canvas{
+    image-rendering:pixelated;width:32px;height:32px;
+    background:var(--sky);border:1px solid var(--ink);flex:none;
+  }
+  .piece .nm{flex:1;text-transform:uppercase;letter-spacing:.06em}
+  .piece .sz{color:var(--ink-2);font-size:10px}
+
+  /* ---- stage ---------------------------------------------------- */
+  .stage{padding:10px 12px 12px}
+  .readout{
+    display:flex;gap:16px;flex-wrap:wrap;align-items:center;
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-2);margin-bottom:7px;
+  }
+  .readout b{color:var(--ink);font-weight:400}
+
+  #view{
+    display:block;width:100%;image-rendering:pixelated;
+    border:3px solid var(--ink);background:var(--sky);
+    cursor:crosshair;touch-action:none;
+  }
+  #view:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  /* ---- signature: full-track ruler ------------------------------ */
+  .ruler-wrap{margin-top:10px}
+  #ruler{
+    display:block;width:100%;height:34px;image-rendering:pixelated;
+    border:2px solid var(--ink);background:var(--paper-2);cursor:pointer;
+  }
+  #ruler:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+  .ruler-legend{
+    display:flex;justify-content:space-between;
+    font-size:10px;letter-spacing:.12em;color:var(--ink-2);margin-top:3px;
+  }
+
+  /* ---- controls -------------------------------------------------- */
+  .controls{
+    display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+    margin-top:12px;padding-top:10px;border-top:2px solid var(--ink);
+  }
+  button.act{
+    font-family:var(--display);font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;padding:7px 11px;cursor:pointer;
+    background:var(--paper);color:var(--ink);border:2px solid var(--ink);
+    box-shadow:2px 2px 0 var(--ink);
+  }
+  button.act:hover{background:var(--amber)}
+  button.act:active{transform:translate(2px,2px);box-shadow:none}
+  button.act:focus-visible{outline:3px solid var(--plate);outline-offset:2px}
+  button.act.danger{color:var(--plate)}
+
+  .keys{
+    margin-top:10px;padding-top:8px;border-top:1px dashed var(--ink-2);
+    font-size:11px;color:var(--ink-2);display:flex;gap:14px;flex-wrap:wrap;
+  }
+  kbd{
+    font-family:var(--util);font-size:10px;background:var(--ink);color:var(--paper);
+    padding:1px 5px;border-radius:2px;
+  }
+
+  #status{
+    min-height:1.4em;margin-top:8px;font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--plate);
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important}
+    button.act:active{transform:none}
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <h1>Design Mode</h1>
+    <span class="sub">One lane · 16px pieces</span>
+    <span class="spacer"></span>
+    <label class="sub" for="trackName">Track</label>
+    <input id="trackName" value="TRACK 01" maxlength="24" aria-label="Track name">
+  </header>
+
+  <div class="body">
+
+    <!-- ============ PIECE SELECT ============ -->
+    <nav class="palette" aria-label="Piece select">
+      <p class="eyebrow">Piece select</p>
+      <div id="paletteList"></div>
+      <p class="eyebrow" style="margin-top:14px">Lane</p>
+      <p style="font-size:11px;color:var(--ink-2);margin:0">
+        Fixed. One lane, twelve rows tall. Rows are terrain height, not lanes —
+        there is nothing to change lanes into.
+      </p>
+    </nav>
+
+    <!-- ============ STAGE ============ -->
+    <main class="stage">
+      <div class="readout">
+        <span>Column <b id="rCol">—</b></span>
+        <span>Row <b id="rRow">—</b></span>
+        <span>Holding <b id="rPiece">Grass</b></span>
+        <span>Placed <b id="rCount">0</b></span>
+        <span>Length <b id="rLen">256</b></span>
+      </div>
+
+      <canvas id="view" width="256" height="192" tabindex="0"
+              aria-label="Track editor. Arrow keys scroll, number keys pick a piece, Space places."></canvas>
+
+      <div class="ruler-wrap">
+        <canvas id="ruler" width="256" height="34" tabindex="0"
+                aria-label="Whole track overview. Click to jump to a column."></canvas>
+        <div class="ruler-legend"><span>Start 0</span><span>Whole track</span><span id="rulerEnd">End 255</span></div>
+      </div>
+
+      <div class="controls">
+        <button class="act" id="btnExport">Export JSON</button>
+        <button class="act" id="btnImport">Import JSON</button>
+        <button class="act" id="btnPng">Export PNG</button>
+        <button class="act" id="btnGround">Reset ground</button>
+        <button class="act danger" id="btnClear">Clear track</button>
+        <input type="file" id="fileIn" accept="application/json" hidden>
+      </div>
+
+      <div class="keys">
+        <span><kbd>1</kbd>–<kbd>7</kbd> pick piece</span>
+        <span><kbd>0</kbd> eraser</span>
+        <span><kbd>←</kbd><kbd>→</kbd> scroll</span>
+        <span><kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> jump 8</span>
+        <span><kbd>Space</kbd> place</span>
+        <span>drag to paint · right-click erases</span>
+      </div>
+
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+   ONE-LANE DESIGN MODE
+   Structure mirrors Excitebike's Design mode: a numbered piece
+   palette, a cursor that travels along a fixed-length track, a stamp
+   action, and a whole-track overview strip. Removed: lane selection,
+   lane changing, and the multi-row track that made them meaningful.
+   Added: Mario-sized (16px) pieces on a 2D grid, so a "piece" has a
+   footprint instead of a single track slot.
+
+   No external assets. All sprites are drawn procedurally at boot.
+   No localStorage — the track lives in memory; JSON export is save.
+   =================================================================== */
+
+/* ---------- 1. CONSTANTS ---------- */
+const TILE = 16;
+const COLS = 256;                    // track length, in tiles
+const ROWS = 12;                     // lane height, in tiles
+const VIEW_COLS = 16;                // 16 * 16px = 256px canvas = NES width
+const GROUND_ROW = 10;               // default surface row
+
+/* ---------- 2. SPRITE FACTORY ----------
+   Each piece is drawn once, at its natural footprint size, into an
+   offscreen canvas. Pieces are blitted whole; there is no tile atlas
+   and no sub-tile slicing to keep in sync. */
+
+const C = {
+  grassLo:'#2E7A22', grassMid:'#3FA02C', grassHi:'#63CC42',
+  dirtHi:'#D9915A',  dirtMid:'#B06A2E',  dirtLo:'#7A4416',
+  brickHi:'#E08A50', brickMid:'#C0561A', brickLo:'#7E3308', mortar:'#141010',
+  leafHi:'#63CC42',  leafMid:'#2E9E30',  leafLo:'#1C6B22',
+  bark:'#8A5A22',    barkLo:'#5C3A12',
+  hillHi:'#3FA02C',  hillMid:'#2E8424',  hillLo:'#1E5C18',
+  outline:'#14240E'
+};
+
+function surface(w,h){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = false;
+  return {c,x};
+}
+const px = (x,col,X,Y,W=1,H=1)=>{ x.fillStyle=col; x.fillRect(X,Y,W,H); };
+
+/* -- ground ------------------------------------------------------- */
+function makeGrass(){
+  const {c,x} = surface(TILE,TILE);
+  px(x,C.dirtMid,0,0,16,16);
+  // dirt grain
+  [[2,7],[9,6],[5,11],[12,10],[7,14],[1,12],[13,4]].forEach(([a,b])=>px(x,C.dirtLo,a,b,2,1));
+  [[4,5],[11,8],[2,9],[8,12]].forEach(([a,b])=>px(x,C.dirtHi,a,b,2,1));
+  // grass cap with a scalloped edge
+  px(x,C.grassMid,0,0,16,4);
+  px(x,C.grassHi,0,0,16,2);
+  for(let i=0;i<16;i+=2) px(x,C.grassHi,i,2,1,1);
+  px(x,C.grassLo,0,4,16,1);
+  for(let i=1;i<16;i+=4) px(x,C.grassLo,i,3,1,1);
+  return c;
+}
+function makeDirt(){
+  const {c,x} = surface(TILE,TILE);
+  px(x,C.dirtMid,0,0,16,16);
+  [[2,3],[10,2],[6,7],[13,9],[3,12],[9,13]].forEach(([a,b])=>px(x,C.dirtLo,a,b,3,1));
+  [[5,4],[12,6],[1,9],[7,11]].forEach(([a,b])=>px(x,C.dirtHi,a,b,2,1));
+  return c;
+}
+
+/* -- brick: running bond, 4px courses ----------------------------- */
+function makeBrick(){
+  const {c,x} = surface(TILE,TILE);
+  px(x,C.mortar,0,0,16,16);
+  const course = (y, seam) => {
+    // one 4px-tall course, split by a vertical mortar seam at `seam`
+    px(x,C.brickMid,0,y+1,16,3);
+    px(x,C.brickHi,0,y+1,16,1);
+    px(x,C.brickLo,0,y+3,16,1);
+    if(seam >= 0 && seam < 16) px(x,C.mortar,seam,y+1,1,3);
+  };
+  course(0,8); course(4,0); course(8,8); course(12,0);
+  return c;
+}
+
+/* -- bush: three lumps, per-row width table ----------------------- */
+function makeBush(){
+  const {c,x} = surface(TILE,TILE);
+  const rows = [[6,4],[4,8],[2,12],[1,14],[0,16],[0,16]]; // [xStart, width] from y=10
+  rows.forEach(([sx,w],i)=>{
+    const y = 10+i;
+    px(x,C.leafMid,sx,y,w,1);
+  });
+  // highlight lumps
+  px(x,C.leafHi,6,10,3,1); px(x,C.leafHi,4,11,3,1);
+  px(x,C.leafHi,1,13,3,1); px(x,C.leafHi,10,12,3,1);
+  px(x,C.leafLo,0,15,16,1);
+  return c;
+}
+
+/* -- tree: 1 wide x 2 tall (16 x 32) ------------------------------ */
+function makeTree(){
+  const {c,x} = surface(TILE,TILE*2);
+  const canopy = [[6,4],[4,8],[3,10],[2,12],[1,14],[1,14],[0,16],[0,16],
+                  [1,14],[2,12],[3,10],[4,8]];
+  canopy.forEach(([sx,w],i)=>px(x,C.leafMid,sx,i+1,w,1));
+  px(x,C.leafHi,5,2,3,1); px(x,C.leafHi,3,4,3,1);
+  px(x,C.leafHi,2,7,3,1); px(x,C.leafHi,9,6,2,1);
+  px(x,C.leafLo,4,12,8,1);
+  px(x,C.bark,7,13,3,18);
+  px(x,C.barkLo,9,13,1,18);
+  px(x,C.barkLo,6,29,5,3);
+  px(x,C.bark,5,30,7,2);
+  return c;
+}
+
+/* -- hill: 2 wide x 2 tall mound (32 x 32) ------------------------ */
+function makeHill(flip){
+  const {c,x} = surface(TILE*2,TILE*2);
+  // half-cosine mound profile across 32px
+  for(let X=0; X<32; X++){
+    const t = X/31;
+    const top = Math.round(32 - 26*Math.sin(Math.PI*t) - 4);
+    px(x,C.hillMid,X,top,1,32-top);
+    px(x,C.hillHi,X,top,1,2);
+  }
+  px(x,C.hillLo,0,30,32,2);
+  // face shading on the lee side
+  [[8,20],[22,18],[15,25]].forEach(([a,b])=>px(x,C.hillLo,a,b,3,1));
+  if(!flip) return c;
+  const {c:m,x:mx} = surface(TILE*2,TILE*2);
+  mx.translate(32,0); mx.scale(-1,1); mx.drawImage(c,0,0);
+  return m;
+}
+
+/* ---------- 3. PIECE TABLE ----------
+   `key` is the Excitebike-style number. `w`/`h` are footprint in tiles. */
+const PIECES = [
+  {id:'GRASS', key:'1', name:'Grass',  w:1,h:1, tint:'#3FA02C', img:makeGrass()},
+  {id:'DIRT',  key:'2', name:'Dirt',   w:1,h:1, tint:'#B06A2E', img:makeDirt()},
+  {id:'BRICK', key:'3', name:'Brick',  w:1,h:1, tint:'#C0561A', img:makeBrick()},
+  {id:'BUSH',  key:'4', name:'Bush',   w:1,h:1, tint:'#2E9E30', img:makeBush()},
+  {id:'TREE',  key:'5', name:'Tree',   w:1,h:2, tint:'#1C6B22', img:makeTree()},
+  {id:'HILL',  key:'6', name:'Hill',   w:2,h:2, tint:'#2E8424', img:makeHill(false)},
+  {id:'HILLR', key:'7', name:'Hill R', w:2,h:2, tint:'#1E5C18', img:makeHill(true)},
+];
+const BY_ID  = Object.fromEntries(PIECES.map(p=>[p.id,p]));
+const BY_KEY = Object.fromEntries(PIECES.map(p=>[p.key,p]));
+
+/* ---------- 4. TRACK MODEL ----------
+   One grid, one piece per cell. A multi-tile piece writes an origin
+   record into its top-left cell and back-references into the rest, so
+   erasing any covered cell removes the whole piece. */
+
+const track = {
+  name:'TRACK 01',
+  cells: new Array(COLS*ROWS).fill(null),   // {id, ox, oy}
+  count: 0
+};
+const idx = (col,row)=> row*COLS + col;
+const get = (col,row)=> (col<0||col>=COLS||row<0||row>=ROWS) ? undefined : track.cells[idx(col,row)];
+
+function eraseAt(col,row){
+  const cell = get(col,row);
+  if(!cell) return false;
+  const p = BY_ID[cell.id];
+  for(let dy=0; dy<p.h; dy++)
+    for(let dx=0; dx<p.w; dx++)
+      track.cells[idx(cell.ox+dx, cell.oy+dy)] = null;
+  track.count--;
+  return true;
+}
+
+function place(pieceId, col, row){
+  const p = BY_ID[pieceId];
+  if(col < 0 || row < 0 || col+p.w > COLS || row+p.h > ROWS) return false;
+  // clear anything the footprint overlaps, whole pieces at a time
+  for(let dy=0; dy<p.h; dy++)
+    for(let dx=0; dx<p.w; dx++) eraseAt(col+dx, row+dy);
+  for(let dy=0; dy<p.h; dy++)
+    for(let dx=0; dx<p.w; dx++)
+      track.cells[idx(col+dx,row+dy)] = {id:pieceId, ox:col, oy:row};
+  track.count++;
+  return true;
+}
+
+function layGround(){
+  for(let c=0;c<COLS;c++){
+    place('GRASS', c, GROUND_ROW);
+    place('DIRT',  c, GROUND_ROW+1);
+  }
+}
+function clearAll(){
+  track.cells.fill(null); track.count = 0;
+}
+
+/* ---------- 5. EDITOR STATE ---------- */
+const ed = {
+  camCol: 0,        // leftmost visible column
+  curCol: 0,        // cursor column (keyboard stamp target)
+  curRow: GROUND_ROW-1,
+  held: 'GRASS',    // null = eraser
+  painting: false,
+  paintErase: false
+};
+
+/* ---------- 6. RENDER ---------- */
+const view = document.getElementById('view');
+const vx = view.getContext('2d');
+vx.imageSmoothingEnabled = false;
+
+const ruler = document.getElementById('ruler');
+const rx = ruler.getContext('2d');
+rx.imageSmoothingEnabled = false;
+
+function draw(){
+  vx.fillStyle = '#5C94FC';
+  vx.fillRect(0,0,view.width,view.height);
+
+  // horizon band — reads as depth without costing a layer
+  vx.fillStyle = 'rgba(255,255,255,0.10)';
+  vx.fillRect(0, (GROUND_ROW-2)*TILE, view.width, 2*TILE);
+
+  // grid, quiet
+  vx.fillStyle = 'rgba(0,0,0,0.07)';
+  for(let c=0;c<=VIEW_COLS;c++) vx.fillRect(c*TILE,0,1,view.height);
+  for(let r=0;r<=ROWS;r++)      vx.fillRect(0,r*TILE,view.width,1);
+
+  // pieces: only draw a cell that is its own origin
+  for(let r=0;r<ROWS;r++){
+    for(let c=ed.camCol; c<ed.camCol+VIEW_COLS; c++){
+      const cell = get(c,r);
+      if(!cell || cell.ox!==c || cell.oy!==r) continue;
+      const p = BY_ID[cell.id];
+      vx.drawImage(p.img, (c-ed.camCol)*TILE, r*TILE);
+    }
+  }
+
+  // cursor footprint
+  const p = ed.held ? BY_ID[ed.held] : {w:1,h:1};
+  const sx = (ed.curCol-ed.camCol)*TILE, sy = ed.curRow*TILE;
+  if(ed.curCol>=ed.camCol && ed.curCol<ed.camCol+VIEW_COLS){
+    vx.strokeStyle = ed.held ? '#F0A818' : '#C0271B';
+    vx.lineWidth = 1;
+    vx.strokeRect(sx+0.5, sy+0.5, p.w*TILE-1, p.h*TILE-1);
+    vx.strokeStyle = 'rgba(0,0,0,0.5)';
+    vx.strokeRect(sx+1.5, sy+1.5, p.w*TILE-3, p.h*TILE-3);
+  }
+  drawRuler();
+  syncReadout();
+}
+
+/* Signature element: the whole 256-column track at 1px per column,
+   with a bracket showing the 16-column window you are editing. */
+function drawRuler(){
+  rx.fillStyle = '#D8D1BE';
+  rx.fillRect(0,0,ruler.width,ruler.height);
+
+  for(let c=0;c<COLS;c++){
+    let top = -1, tint = null;
+    for(let r=0;r<ROWS;r++){
+      const cell = get(c,r);
+      if(cell){ top = r; tint = BY_ID[cell.id].tint; break; }
+    }
+    if(top < 0) continue;
+    const y = Math.round((top/ROWS)*26);
+    rx.fillStyle = tint;
+    rx.fillRect(c, y+4, 1, 26-y);
+  }
+  // decade ticks
+  rx.fillStyle = 'rgba(25,23,19,0.35)';
+  for(let c=0;c<COLS;c+=16) rx.fillRect(c,0,1,3);
+
+  // viewport bracket
+  rx.fillStyle = '#C0271B';
+  rx.fillRect(ed.camCol, 0, VIEW_COLS, 2);
+  rx.fillRect(ed.camCol, 32, VIEW_COLS, 2);
+  rx.fillRect(ed.camCol, 0, 1, 34);
+  rx.fillRect(ed.camCol+VIEW_COLS-1, 0, 1, 34);
+  // cursor tick
+  rx.fillStyle = '#F0A818';
+  rx.fillRect(ed.curCol, 3, 1, 28);
+}
+
+function syncReadout(){
+  document.getElementById('rCol').textContent = ed.curCol;
+  document.getElementById('rRow').textContent = ed.curRow;
+  document.getElementById('rPiece').textContent = ed.held ? BY_ID[ed.held].name : 'Eraser';
+  document.getElementById('rCount').textContent = track.count;
+}
+const say = m => { document.getElementById('status').textContent = m; };
+
+/* ---------- 7. PALETTE UI ---------- */
+function buildPalette(){
+  const host = document.getElementById('paletteList');
+  const mk = (label, keyLabel, img, id, size) => {
+    const b = document.createElement('button');
+    b.className='piece'; b.type='button';
+    b.setAttribute('aria-pressed', String(ed.held===id));
+    b.dataset.id = id ?? '';
+    const n = document.createElement('span'); n.className='num'; n.textContent=keyLabel;
+    const cv = document.createElement('canvas'); cv.width=32; cv.height=32;
+    const cx = cv.getContext('2d'); cx.imageSmoothingEnabled=false;
+    if(img){
+      const s = Math.min(32/img.width, 32/img.height);
+      const w = img.width*s, h = img.height*s;
+      cx.drawImage(img, (32-w)/2, 32-h, w, h);
+    }else{
+      cx.fillStyle='#C0271B';
+      cx.fillRect(6,14,20,4); cx.fillRect(14,6,4,20);
+      cx.fillStyle='#E7E1D2'; cx.fillRect(8,15,16,2);
+    }
+    const nm = document.createElement('span'); nm.className='nm'; nm.textContent=label;
+    const sz = document.createElement('span'); sz.className='sz'; sz.textContent=size;
+    b.append(n,cv,nm,sz);
+    b.onclick = ()=> selectPiece(id);
+    host.appendChild(b);
+  };
+  PIECES.forEach(p => mk(p.name, p.key, p.img, p.id, `${p.w}×${p.h}`));
+  mk('Eraser','0',null,null,'1×1');
+}
+function selectPiece(id){
+  ed.held = id;
+  document.querySelectorAll('.piece').forEach(b=>{
+    b.setAttribute('aria-pressed', String((b.dataset.id||null) === (id||null)));
+  });
+  say(id ? `Holding ${BY_ID[id].name}` : 'Holding eraser');
+  draw();
+}
+
+/* ---------- 8. INPUT ---------- */
+function cellFromEvent(e){
+  const r = view.getBoundingClientRect();
+  const cx = Math.floor(((e.clientX - r.left) / r.width)  * VIEW_COLS);
+  const cy = Math.floor(((e.clientY - r.top)  / r.height) * ROWS);
+  return { col: ed.camCol + Math.max(0,Math.min(VIEW_COLS-1,cx)),
+           row: Math.max(0,Math.min(ROWS-1,cy)) };
+}
+
+function stamp(col,row,erase){
+  if(erase || !ed.held){
+    if(eraseAt(col,row)) draw();
+    return;
+  }
+  const p = BY_ID[ed.held];
+  // anchor multi-tile pieces so the cursor is their bottom-left foot
+  const oy = Math.min(row, ROWS - p.h);
+  if(place(ed.held, Math.min(col, COLS-p.w), oy)) draw();
+}
+
+view.addEventListener('contextmenu', e=>e.preventDefault());
+view.addEventListener('pointerdown', e=>{
+  view.focus();
+  view.setPointerCapture(e.pointerId);
+  const {col,row} = cellFromEvent(e);
+  ed.curCol = col; ed.curRow = row;
+  ed.painting = true;
+  ed.paintErase = (e.button === 2) || e.shiftKey;
+  stamp(col,row,ed.paintErase);
+});
+view.addEventListener('pointermove', e=>{
+  const {col,row} = cellFromEvent(e);
+  if(col===ed.curCol && row===ed.curRow && !ed.painting) return;
+  ed.curCol = col; ed.curRow = row;
+  if(ed.painting) stamp(col,row,ed.paintErase); else draw();
+});
+const stopPaint = ()=>{ ed.painting = false; };
+view.addEventListener('pointerup', stopPaint);
+view.addEventListener('pointercancel', stopPaint);
+window.addEventListener('blur', stopPaint);
+
+function scrollTo(col){
+  ed.camCol = Math.max(0, Math.min(COLS - VIEW_COLS, col));
+}
+function moveCursor(d){
+  ed.curCol = Math.max(0, Math.min(COLS-1, ed.curCol + d));
+  if(ed.curCol < ed.camCol) scrollTo(ed.curCol);
+  if(ed.curCol > ed.camCol + VIEW_COLS - 1) scrollTo(ed.curCol - VIEW_COLS + 1);
+}
+
+window.addEventListener('keydown', e=>{
+  if(e.target.tagName === 'INPUT') return;
+  const step = e.shiftKey ? 8 : 1;
+  switch(e.key){
+    case 'ArrowLeft':  moveCursor(-step); break;
+    case 'ArrowRight': moveCursor( step); break;
+    case 'ArrowUp':    ed.curRow = Math.max(0, ed.curRow-1); break;
+    case 'ArrowDown':  ed.curRow = Math.min(ROWS-1, ed.curRow+1); break;
+    case 'Home':       ed.curCol = 0; scrollTo(0); break;
+    case 'End':        ed.curCol = COLS-1; scrollTo(COLS-VIEW_COLS); break;
+    case ' ': case 'Enter': stamp(ed.curCol, ed.curRow, false); break;
+    case 'x': case 'X': case 'Backspace': case 'Delete':
+      stamp(ed.curCol, ed.curRow, true); break;
+    case '0': selectPiece(null); return;
+    default:
+      if(BY_KEY[e.key]){ selectPiece(BY_KEY[e.key].id); return; }
+      return;
+  }
+  e.preventDefault();
+  draw();
+});
+
+ruler.addEventListener('pointerdown', e=>{
+  const r = ruler.getBoundingClientRect();
+  const col = Math.round(((e.clientX - r.left)/r.width) * COLS);
+  ed.curCol = Math.max(0, Math.min(COLS-1, col));
+  scrollTo(ed.curCol - Math.floor(VIEW_COLS/2));
+  draw();
+});
+
+/* ---------- 9. SAVE / LOAD ----------
+   Excitebike wrote designs to cassette. This writes a flat piece list:
+   only origin cells are stored, so the file is the same size as the
+   design, not the size of the grid. */
+
+function serialize(){
+  const pieces = [];
+  for(let r=0;r<ROWS;r++)
+    for(let c=0;c<COLS;c++){
+      const cell = get(c,r);
+      if(cell && cell.ox===c && cell.oy===r) pieces.push({p:cell.id, x:c, y:r});
+    }
+  return { format:'onelane-design', version:1,
+           name:document.getElementById('trackName').value.trim() || 'UNTITLED',
+           cols:COLS, rows:ROWS, tile:TILE, pieces };
+}
+
+function deserialize(data){
+  if(!data || data.format !== 'onelane-design')
+    throw new Error('Not a one-lane design file');
+  if(!Array.isArray(data.pieces)) throw new Error('No pieces array');
+  clearAll();
+  let skipped = 0;
+  for(const it of data.pieces){
+    if(!BY_ID[it.p]){ skipped++; continue; }
+    if(!place(it.p, it.x|0, it.y|0)) skipped++;
+  }
+  document.getElementById('trackName').value = (data.name||'UNTITLED').slice(0,24);
+  return skipped;
+}
+
+function download(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+document.getElementById('btnExport').onclick = ()=>{
+  const data = serialize();
+  const safe = data.name.replace(/[^A-Za-z0-9_-]+/g,'_').toLowerCase();
+  download(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}), `${safe}.json`);
+  say(`Exported ${data.pieces.length} pieces`);
+};
+
+document.getElementById('btnImport').onclick = ()=> document.getElementById('fileIn').click();
+document.getElementById('fileIn').onchange = async e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  try{
+    const skipped = deserialize(JSON.parse(await f.text()));
+    draw();
+    say(skipped ? `Loaded. ${skipped} pieces did not fit and were dropped.`
+               : `Loaded ${track.count} pieces`);
+  }catch(err){
+    say(`Import failed: ${err.message}`);
+  }
+  e.target.value = '';
+};
+
+/* Full-track PNG: renders all 256 columns, not just the viewport. */
+document.getElementById('btnPng').onclick = ()=>{
+  const {c,x} = surface(COLS*TILE, ROWS*TILE);
+  x.fillStyle='#5C94FC'; x.fillRect(0,0,c.width,c.height);
+  for(let r=0;r<ROWS;r++)
+    for(let col=0;col<COLS;col++){
+      const cell = get(col,r);
+      if(cell && cell.ox===col && cell.oy===r)
+        x.drawImage(BY_ID[cell.id].img, col*TILE, r*TILE);
+    }
+  c.toBlob(b=>{
+    download(b, (document.getElementById('trackName').value||'track')
+      .replace(/[^A-Za-z0-9_-]+/g,'_').toLowerCase() + '.png');
+    say('Exported full-track PNG (4096 × 192)');
+  });
+};
+
+document.getElementById('btnGround').onclick = ()=>{ layGround(); draw(); say('Ground relaid'); };
+document.getElementById('btnClear').onclick  = ()=>{ clearAll(); draw(); say('Track cleared'); };
+
+/* ---------- 10. BOOT ---------- */
+document.getElementById('rLen').textContent = COLS;
+document.getElementById('rulerEnd').textContent = 'End ' + (COLS-1);
+buildPalette();
+layGround();
+selectPiece('BRICK');
+draw();
+say('Ready. Pick a piece, click the track.');
+</script>
+</body>
+</html>

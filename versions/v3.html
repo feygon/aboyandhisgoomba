@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design Mode — One-Lane Track Editor</title>
+<style>
+  :root{
+    --paper:#E7E1D2; --paper-2:#D8D1BE;
+    --ink:#191713;   --ink-2:#5C574B;
+    --plate:#C0271B; --sky:#5C94FC; --amber:#F0A818;
+    --display:"Arial Black","Helvetica Neue",Impact,sans-serif;
+    --util:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper-2);color:var(--ink);
+    font-family:var(--util);font-size:13px;line-height:1.45;padding:16px;
+    background-image:radial-gradient(rgba(25,23,19,.055) 1px,transparent 1px);
+    background-size:3px 3px;
+  }
+  .sheet{max-width:1240px;margin:0 auto;background:var(--paper);
+    border:3px solid var(--ink);box-shadow:6px 6px 0 rgba(25,23,19,.22)}
+
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+    padding:10px 14px;border-bottom:3px solid var(--ink);
+    background:var(--plate);color:var(--paper)}
+  h1{font-family:var(--display);font-size:19px;letter-spacing:.14em;text-transform:uppercase;margin:0}
+  .sub{font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.85}
+  header .spacer{flex:1}
+  #trackName{font-family:var(--util);font-size:12px;background:var(--paper);color:var(--ink);
+    border:2px solid var(--ink);padding:3px 6px;width:170px}
+  #trackName:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+
+  .body{display:grid;grid-template-columns:214px 1fr}
+  @media (max-width:820px){ .body{grid-template-columns:1fr} }
+
+  .palette{border-right:3px solid var(--ink);padding:10px}
+  @media (max-width:820px){ .palette{border-right:0;border-bottom:3px solid var(--ink)} }
+  .eyebrow{font-family:var(--display);font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--ink-2);margin:0 0 6px}
+  .eyebrow.gap{margin-top:13px}
+
+  .layers{display:flex;margin-bottom:12px}
+  .layers button{flex:1;font-family:var(--display);font-size:9px;letter-spacing:.08em;
+    text-transform:uppercase;padding:8px 2px;cursor:pointer;
+    background:var(--paper-2);color:var(--ink-2);border:2px solid var(--ink);border-right-width:0}
+  .layers button:last-child{border-right-width:2px}
+  .layers button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .layers button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .piece{display:flex;align-items:center;gap:8px;width:100%;
+    background:transparent;border:2px solid transparent;padding:3px 5px;margin-bottom:2px;
+    cursor:pointer;text-align:left;font-family:var(--util);font-size:12px;color:var(--ink)}
+  .piece:hover{background:var(--paper-2)}
+  .piece[aria-pressed="true"]{border-color:var(--plate);background:#fff}
+  .piece:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+  .piece .num{font-family:var(--display);font-size:11px;width:13px;color:var(--plate)}
+  .piece canvas{image-rendering:pixelated;width:40px;height:36px;
+    background:var(--sky);border:1px solid var(--ink);flex:none}
+  .piece .nm{flex:1;text-transform:uppercase;letter-spacing:.05em}
+  .piece .sz{color:var(--ink-2);font-size:9px;text-align:right;line-height:1.15}
+
+  .stage{padding:10px 12px 12px}
+  .readout{display:flex;gap:13px;flex-wrap:wrap;align-items:center;
+    font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2);margin-bottom:7px}
+  .readout b{color:var(--ink);font-weight:400}
+  .zoom{margin-left:auto;display:flex;gap:4px;align-items:center}
+  .zoom button{font-family:var(--util);font-size:11px;padding:2px 8px;cursor:pointer;
+    background:var(--paper);border:2px solid var(--ink);color:var(--ink)}
+  .zoom button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .zoom button:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+
+  #view{display:block;width:100%;image-rendering:pixelated;
+    border:3px solid var(--ink);background:var(--sky);cursor:crosshair;touch-action:none}
+  #view:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .ruler-wrap{margin-top:10px}
+  #ruler{display:block;width:100%;height:40px;image-rendering:pixelated;
+    border:2px solid var(--ink);background:var(--paper-2);cursor:pointer}
+  #ruler:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+  .ruler-legend{display:flex;justify-content:space-between;font-size:10px;
+    letter-spacing:.12em;color:var(--ink-2);margin-top:3px}
+
+  .controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+    margin-top:12px;padding-top:10px;border-top:2px solid var(--ink)}
+  button.act{font-family:var(--display);font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;padding:7px 11px;cursor:pointer;background:var(--paper);
+    color:var(--ink);border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink)}
+  button.act:hover{background:var(--amber)}
+  button.act:active{transform:translate(2px,2px);box-shadow:none}
+  button.act:focus-visible{outline:3px solid var(--plate);outline-offset:2px}
+  button.act.danger{color:var(--plate)}
+
+  .keys{margin-top:10px;padding-top:8px;border-top:1px dashed var(--ink-2);
+    font-size:11px;color:var(--ink-2);display:flex;gap:13px;flex-wrap:wrap}
+  kbd{font-family:var(--util);font-size:10px;background:var(--ink);color:var(--paper);
+    padding:1px 5px;border-radius:2px}
+
+  #status{min-height:1.4em;margin-top:8px;font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--plate)}
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important}
+    button.act:active{transform:none}
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <h1>Design Mode</h1>
+    <span class="sub">One lane · three planes · snap-together</span>
+    <span class="spacer"></span>
+    <label class="sub" for="trackName">Track</label>
+    <input id="trackName" value="TRACK 01" maxlength="24" aria-label="Track name">
+  </header>
+
+  <div class="body">
+
+    <nav class="palette" aria-label="Piece select">
+      <p class="eyebrow">Plane</p>
+      <div class="layers" role="group" aria-label="Active plane">
+        <button id="planeBg" type="button" aria-pressed="false">Back</button>
+        <button id="planeFg" type="button" aria-pressed="true">Front</button>
+        <button id="planeAc" type="button" aria-pressed="false">Actors</button>
+      </div>
+      <div id="paletteList"></div>
+
+      <p class="eyebrow gap">Snapping</p>
+      <p style="font-size:11px;color:var(--ink-2);margin:0">
+        A 1×1 bit dropped next to a matching shape joins it and re-tiles the
+        seam. Dropped in open space it starts a new shape. Grow a trunk with
+        <kbd>]</kbd> — the canopy rides up with it.
+      </p>
+    </nav>
+
+    <main class="stage">
+      <div class="readout">
+        <span>Col <b id="rCol">—</b></span>
+        <span>Row <b id="rRow">—</b></span>
+        <span>Plane <b id="rLayer">Front</b></span>
+        <span>Holding <b id="rPiece">Brick</b></span>
+        <span>B <b id="rBg">0</b>·F <b id="rFg">0</b>·A <b id="rAc">0</b></span>
+        <span class="zoom">
+          <span>View</span>
+          <button type="button" data-cols="12" aria-pressed="false">12</button>
+          <button type="button" data-cols="16" aria-pressed="true">16</button>
+          <button type="button" data-cols="24" aria-pressed="false">24</button>
+          <button type="button" data-cols="32" aria-pressed="false">32</button>
+        </span>
+      </div>
+
+      <canvas id="view" width="256" height="192" tabindex="0"
+        aria-label="Track editor. Arrows move, number and letter keys pick pieces, Space places, Tab changes plane."></canvas>
+
+      <div class="ruler-wrap">
+        <canvas id="ruler" width="256" height="40" tabindex="0"
+          aria-label="Whole track overview. Click to jump to a column."></canvas>
+        <div class="ruler-legend">
+          <span>Start 0</span><span>Back above · front below · actors marked</span><span id="rulerEnd">End 255</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="act" id="btnExport">Export JSON</button>
+        <button class="act" id="btnImport">Import JSON</button>
+        <button class="act" id="btnPng">Export PNG</button>
+        <button class="act" id="btnGround">Reset ground</button>
+        <button class="act danger" id="btnClearLayer">Clear plane</button>
+        <button class="act danger" id="btnClear">Clear all</button>
+        <input type="file" id="fileIn" accept="application/json" hidden>
+      </div>
+
+      <div class="keys">
+        <span><kbd>1</kbd>–<kbd>8</kbd> pieces</span>
+        <span><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> 1×1 bits</span>
+        <span><kbd>0</kbd> eraser</span>
+        <span><kbd>Tab</kbd> plane</span>
+        <span><kbd>[</kbd><kbd>]</kbd> trunk height</span>
+        <span><kbd>Space</kbd> place · <kbd>X</kbd> erase</span>
+        <span><kbd>Alt</kbd>+erase kills whole shape</span>
+      </div>
+
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+   ONE-LANE DESIGN MODE — v3
+
+   New in v3:
+   · Shapes are cell sets, not fixed sprites. A 1×1 bit dropped beside a
+     compatible shape joins that shape; edges re-tile from a 4-bit
+     neighbour mask, so arbitrary blobs read correctly.
+   · Trees carry a trunk column whose height is editable; growing it
+     lifts the canopy rather than burying the base.
+   · Third plane for actors. Goombas live there.
+
+   Kept from v2: free overlap, z-order by placement order, adjustable
+   view width. No assets, no localStorage, no dependencies.
+   =================================================================== */
+
+/* ---------- 1. CONSTANTS ---------- */
+const TILE = 16, COLS = 256, ROWS = 12, GROUND_ROW = 10;
+const PLANES = ['bg','fg','actors'];
+const PLANE_LABEL = {bg:'Back', fg:'Front', actors:'Actors'};
+
+/* ---------- 2. PALETTE OF COLOURS ---------- */
+const C = {
+  grassLo:'#2E7A22', grassMid:'#3FA02C', grassHi:'#63CC42',
+  dirtHi:'#D9915A',  dirtMid:'#B06A2E',  dirtLo:'#7A4416',
+  brickHi:'#E08A50', brickMid:'#C0561A', brickLo:'#7E3308', mortar:'#141010',
+  leafHi:'#63CC42',  leafMid:'#2E9E30',  leafLo:'#1C6B22',
+  bark:'#8A5A22',    barkMid:'#6E4418',  barkLo:'#4A2E0E',
+  hillHi:'#4FB838',  hillMid:'#2E8424',  hillLo:'#1E5C18',
+  cloudHi:'#FFFFFF', cloudLo:'#C8D8F8', cloudEdge:'#9CB4EC',
+  gBody:'#A0522A',   gBodyHi:'#C87840',  gBodyLo:'#6B3312',
+  gFoot:'#4A2A10',   gEye:'#FFFFFF',     gPupil:'#141010'
+};
+
+function surface(w,h){
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const x=c.getContext('2d'); x.imageSmoothingEnabled=false; return {c,x};
+}
+const px=(x,col,X,Y,W=1,H=1)=>{ x.fillStyle=col; x.fillRect(X,Y,W,H); };
+
+/* ===================================================================
+   3. AUTOTILING
+   Every growable material is one 16-variant tileset generated from a
+   4-bit mask: N=1 E=2 S=4 W=8, bit set when a same-material neighbour
+   is in the same shape. Open corners get carved, open top and bottom
+   get rim shading. One generator, four materials.
+   =================================================================== */
+
+const N_=1, E_=2, S_=4, W_=8;
+
+function carvedFill(x, mask, r){
+  const N=mask&N_, E=mask&E_, S=mask&S_, W=mask&W_;
+  const out = [];
+  for(let Y=0;Y<16;Y++){
+    let first=-1, last=-1;
+    for(let X=0;X<16;X++){
+      const cx=X+0.5, cy=Y+0.5;
+      let ok = true;
+      const corner=(hx,hy,ox,oy)=>{
+        if(hx||hy) return true;
+        const dx=cx-ox, dy=cy-oy;
+        return (Math.abs(cx-ox)>r || Math.abs(cy-oy)>r) ? true : dx*dx+dy*dy <= r*r;
+      };
+      if(!N && !W && cx<r && cy<r)        ok = corner(N,W,r,r);
+      if(ok && !N && !E && cx>16-r && cy<r)    ok = corner(N,E,16-r,r);
+      if(ok && !S && !W && cx<r && cy>16-r)    ok = corner(S,W,r,16-r);
+      if(ok && !S && !E && cx>16-r && cy>16-r) ok = corner(S,E,16-r,16-r);
+      if(ok){ if(first<0) first=X; last=X; }
+      out.push(ok);
+    }
+    out.rowInfo = out.rowInfo || [];
+    out.rowInfo.push([first,last]);
+  }
+  return out;
+}
+
+/* leaf + hill mass share the blob generator, with different palettes */
+function blobTile(mask, pal, r, rim){
+  const {c,x} = surface(16,16);
+  const grid = carvedFill(x, mask, r);
+  const at=(X,Y)=>grid[Y*16+X];
+  for(let Y=0;Y<16;Y++) for(let X=0;X<16;X++) if(at(X,Y)) px(x,pal.mid,X,Y);
+
+  const N=mask&N_, S=mask&S_, W=mask&W_, E=mask&E_;
+  for(let X=0;X<16;X++){
+    if(!N) for(let Y=0;Y<16;Y++) if(at(X,Y)){ px(x,pal.hi,X,Y,1,rim); break; }
+    if(!S) for(let Y=15;Y>=0;Y--) if(at(X,Y)){ px(x,pal.lo,X,Math.max(0,Y-rim+1),1,rim); break; }
+  }
+  for(let Y=0;Y<16;Y++){
+    if(!W) for(let X=0;X<16;X++) if(at(X,Y)){ px(x,pal.hi,X,Y,1,1); break; }
+    if(!E) for(let X=15;X>=0;X--) if(at(X,Y)){ px(x,pal.lo,X,Y,1,1); break; }
+  }
+  return c;
+}
+
+function leafTile(mask){
+  const c = blobTile(mask, {mid:C.leafMid, hi:C.leafHi, lo:C.leafLo}, 6, 2);
+  const x = c.getContext('2d');
+  if(!(mask&N_)){ px(x,C.leafHi,5,3,4,1); px(x,C.leafHi,10,4,2,1); }
+  return c;
+}
+function massTile(mask){
+  const c = blobTile(mask, {mid:C.hillMid, hi:C.hillHi, lo:C.hillLo}, 7, 2);
+  const x = c.getContext('2d');
+  if(!(mask&S_)) px(x,C.hillLo,0,14,16,2);
+  if(mask&N_ && mask&S_){ px(x,C.hillLo,4,6,3,1); px(x,C.hillLo,10,11,3,1); }
+  return c;
+}
+
+/* trunk: a narrow bark column that widens into a root flare at its foot */
+function trunkTile(mask){
+  const {c,x} = surface(16,16);
+  const N=mask&N_, S=mask&S_, W=mask&W_, E=mask&E_;
+  let x0 = 4, x1 = 12;
+  if(W) x0 = 0;
+  if(E) x1 = 16;
+  px(x,C.barkMid,x0,0,x1-x0,16);
+  px(x,C.bark,x0,0,2,16);
+  px(x,C.barkLo,x1-2,0,2,16);
+  for(let Y=2;Y<16;Y+=5) px(x,C.barkLo,x0+2,Y,Math.max(1,x1-x0-5),1);
+  if(!S){                       // root flare
+    px(x,C.barkMid,2,13,12,3);
+    px(x,C.bark,2,13,3,3);
+    px(x,C.barkLo,11,13,3,3);
+    px(x,C.barkLo,0,15,16,1);
+  }
+  if(!N) px(x,C.bark,x0,0,x1-x0,1);
+  return c;
+}
+
+/* brick: seamless field, dark keyline only where the shape ends */
+function brickTile(mask){
+  const {c,x} = surface(16,16);
+  px(x,C.mortar,0,0,16,16);
+  const course=(y,seam)=>{
+    px(x,C.brickMid,0,y+1,16,3);
+    px(x,C.brickHi,0,y+1,16,1);
+    px(x,C.brickLo,0,y+3,16,1);
+    if(seam>=0&&seam<16) px(x,C.mortar,seam,y+1,1,3);
+  };
+  course(0,8); course(4,0); course(8,8); course(12,0);
+  if(!(mask&N_)) px(x,C.mortar,0,0,16,1);
+  if(!(mask&S_)) px(x,C.mortar,0,15,16,1);
+  if(!(mask&W_)) px(x,C.mortar,0,0,1,16);
+  if(!(mask&E_)) px(x,C.mortar,15,0,1,16);
+  return c;
+}
+
+/* materials that can be grown one cell at a time */
+const MATERIALS = {
+  LEAF:  {name:'Leaf',  tint:'#2E9E30', gen:leafTile},
+  MASS:  {name:'Mound', tint:'#2E8424', gen:massTile},
+  TRUNK: {name:'Trunk', tint:'#6E4418', gen:trunkTile},
+  BRICK: {name:'Brick', tint:'#C0561A', gen:brickTile},
+};
+const TILESET = {};
+for(const [m,def] of Object.entries(MATERIALS)){
+  TILESET[m] = Array.from({length:16}, (_,mask)=>def.gen(mask));
+}
+
+/* ---------- 4. FIXED SPRITES (no snapping) ---------- */
+function makeGrass(){
+  const {c,x}=surface(16,16);
+  px(x,C.dirtMid,0,0,16,16);
+  [[2,7],[9,6],[5,11],[12,10],[7,14],[1,12],[13,4]].forEach(([a,b])=>px(x,C.dirtLo,a,b,2,1));
+  [[4,5],[11,8],[2,9],[8,12]].forEach(([a,b])=>px(x,C.dirtHi,a,b,2,1));
+  px(x,C.grassMid,0,0,16,4); px(x,C.grassHi,0,0,16,2);
+  for(let i=0;i<16;i+=2) px(x,C.grassHi,i,2,1,1);
+  px(x,C.grassLo,0,4,16,1);
+  for(let i=1;i<16;i+=4) px(x,C.grassLo,i,3,1,1);
+  return c;
+}
+function makeDirt(){
+  const {c,x}=surface(16,16);
+  px(x,C.dirtMid,0,0,16,16);
+  [[2,3],[10,2],[6,7],[13,9],[3,12],[9,13]].forEach(([a,b])=>px(x,C.dirtLo,a,b,3,1));
+  [[5,4],[12,6],[1,9],[7,11]].forEach(([a,b])=>px(x,C.dirtHi,a,b,2,1));
+  return c;
+}
+function makeCloud(){
+  const {c,x}=surface(48,32);
+  const lumps=[[24,17,12],[11,21,8],[37,21,8]];
+  for(let X=0;X<48;X++){
+    let top=Infinity;
+    for(const [cx,cy,r] of lumps){
+      const dx=X-cx;
+      if(Math.abs(dx)<=r) top=Math.min(top, cy-Math.sqrt(r*r-dx*dx));
+    }
+    if(!isFinite(top)||top>=26) continue;
+    top=Math.round(top);
+    px(x,C.cloudHi,X,top,1,26-top);
+    px(x,C.cloudLo,X,23,1,3);
+  }
+  px(x,C.cloudEdge,4,25,40,1);
+  return c;
+}
+
+/* Goomba — original sprite in the same idiom, not Nintendo's artwork.
+   Two frames so the palette swatch and the canvas agree. dir mirrors. */
+function makeGoomba(){
+  const {c,x}=surface(16,16);
+  const lumps=[[8,11,7]];
+  for(let X=0;X<16;X++){
+    const dx=X-8;
+    if(Math.abs(dx)>7) continue;
+    let top=Math.round(11-Math.sqrt(49-dx*dx));
+    px(x,C.gBody,X,top,1,12-top);
+    px(x,C.gBodyHi,X,top,1,2);
+  }
+  px(x,C.gBodyLo,1,10,14,2);
+  // brow + eyes, angled inward
+  px(x,C.gEye,4,6,3,4); px(x,C.gEye,9,6,3,4);
+  px(x,C.gPupil,5,7,2,3); px(x,C.gPupil,9,7,2,3);
+  px(x,C.gBodyLo,4,5,3,1); px(x,C.gBodyLo,9,5,3,1);
+  px(x,C.gPupil,4,6,1,1); px(x,C.gPupil,11,6,1,1);
+  // feet
+  px(x,C.gFoot,1,12,6,4); px(x,C.gFoot,9,12,6,4);
+  px(x,C.gBodyLo,1,12,6,1); px(x,C.gBodyLo,9,12,6,1);
+  return c;
+}
+function mirror(img){
+  const {c,x}=surface(img.width,img.height);
+  x.translate(img.width,0); x.scale(-1,1); x.drawImage(img,0,0);
+  return c;
+}
+
+const SPRITES = {
+  GRASS: makeGrass(), DIRT: makeDirt(), CLOUD: makeCloud(),
+  GOOMBA: makeGoomba()
+};
+SPRITES.GOOMBA_R = mirror(SPRITES.GOOMBA);
+
+/* ===================================================================
+   5. SHAPE FAMILIES
+   A family declares which materials it accepts and what cells it seeds
+   when you stamp a fresh one. Cells are offsets from the anchor, which
+   sits at the shape's centre column and base row.
+   =================================================================== */
+
+const box = (x0,x1,y0,y1,mat)=>{
+  const out=[];
+  for(let dy=y0; dy<=y1; dy++) for(let dx=x0; dx<=x1; dx++) out.push([dx,dy,mat]);
+  return out;
+};
+
+const FAMILIES = {
+  BRICK: { name:'Brick', mats:['BRICK'], seed: ()=>[[0,0,'BRICK']] },
+  BUSH:  { name:'Bush',  mats:['LEAF'],  seed: ()=>box(-1,1,0,0,'LEAF') },
+  HILL:  { name:'Hill',  mats:['MASS'],  seed: ()=>[
+             ...box(-2,2,0,0,'MASS'), ...box(-1,1,-1,-1,'MASS'), [0,-2,'MASS'] ] },
+  TREE:  { name:'Tree',  mats:['LEAF','TRUNK'], seed: ()=>[
+             [0,0,'TRUNK'], [0,-1,'TRUNK'],
+             ...box(-1,1,-3,-2,'LEAF') ] },
+};
+/* which family a loose 1×1 bit starts when it lands in open space */
+const MAT_HOME = { LEAF:'BUSH', MASS:'HILL', TRUNK:'TREE', BRICK:'BRICK' };
+
+/* ---------- 6. PALETTE ENTRIES ---------- */
+const TOOLS = [
+  {key:'1', kind:'stamp',  id:'GRASS',  name:'Grass',  w:1,h:1, note:'1×1'},
+  {key:'2', kind:'stamp',  id:'DIRT',   name:'Dirt',   w:1,h:1, note:'1×1'},
+  {key:'3', kind:'family', id:'BRICK',  name:'Brick',  note:'grows'},
+  {key:'4', kind:'family', id:'BUSH',   name:'Bush',   note:'grows'},
+  {key:'5', kind:'family', id:'TREE',   name:'Tree',   note:'grows'},
+  {key:'6', kind:'family', id:'HILL',   name:'Hill',   note:'grows'},
+  {key:'7', kind:'stamp',  id:'CLOUD',  name:'Cloud',  w:3,h:2, note:'3×2'},
+  {key:'8', kind:'actor',  id:'GOOMBA', name:'Goomba', note:'actors'},
+  {key:'q', kind:'mat',    id:'LEAF',   name:'Leaf bit',  note:'snaps'},
+  {key:'w', kind:'mat',    id:'MASS',   name:'Mound bit', note:'snaps'},
+  {key:'e', kind:'mat',    id:'TRUNK',  name:'Trunk bit', note:'snaps'},
+];
+const TOOL_BY_ID  = Object.fromEntries(TOOLS.map(t=>[t.id,t]));
+const TOOL_BY_KEY = Object.fromEntries(TOOLS.map(t=>[t.key,t]));
+
+const STAMP_TINT = {GRASS:'#3FA02C', DIRT:'#B06A2E', CLOUD:'#DCE6FF'};
+const stampSize  = id => id==='CLOUD' ? [3,2] : [1,1];
+const stampAnchorCol = id => (stampSize(id)[0]-1)>>1;
+const stampAnchorRow = id => stampSize(id)[1]-1;
+
+/* ===================================================================
+   7. TRACK MODEL
+   Each plane is an ordered display list. Order is z-order. Items:
+     {t:'shape', fam, ax, ay, cells:Map<"dx,dy", material>}
+     {t:'stamp', id, ax, ay}
+     {t:'actor', id, ax, ay, dir}
+   =================================================================== */
+
+const track = { bg:[], fg:[], actors:[] };
+const ck = (dx,dy)=> dx+','+dy;
+
+function makeShape(fam, ax, ay){
+  const cells = new Map();
+  for(const [dx,dy,mat] of FAMILIES[fam].seed()) cells.set(ck(dx,dy), mat);
+  return {t:'shape', fam, ax, ay, cells};
+}
+function shapeHas(sh, col, row){ return sh.cells.has(ck(col-sh.ax, row-sh.ay)); }
+function shapeBounds(sh){
+  let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  for(const k of sh.cells.keys()){
+    const [dx,dy]=k.split(',').map(Number);
+    x0=Math.min(x0,dx); x1=Math.max(x1,dx); y0=Math.min(y0,dy); y1=Math.max(y1,dy);
+  }
+  return {x0:sh.ax+x0, x1:sh.ax+x1, y0:sh.ay+y0, y1:sh.ay+y1};
+}
+function itemBounds(it){
+  if(it.t==='shape') return shapeBounds(it);
+  const [w,h] = it.t==='stamp' ? stampSize(it.id) : [1,1];
+  const ox = it.ax - (it.t==='stamp' ? stampAnchorCol(it.id) : 0);
+  const oy = it.ay - (it.t==='stamp' ? stampAnchorRow(it.id) : 0);
+  return {x0:ox, x1:ox+w-1, y0:oy, y1:oy+h-1};
+}
+function itemCovers(it, col, row){
+  if(it.t==='shape') return shapeHas(it, col, row);
+  const b = itemBounds(it);
+  return col>=b.x0 && col<=b.x1 && row>=b.y0 && row<=b.y1;
+}
+const inBounds = (col,row)=> col>=0 && col<COLS && row>=0 && row<ROWS;
+
+/* -- placing a whole family: seed a new shape, clamped onto the grid -- */
+function placeFamily(plane, fam, col, row){
+  const sh = makeShape(fam, col, row);
+  const b = shapeBounds(sh);
+  sh.ax += Math.max(0, -b.x0) - Math.max(0, b.x1-(COLS-1));
+  sh.ay += Math.max(0, -b.y0) - Math.max(0, b.y1-(ROWS-1));
+  track[plane].push(sh);
+  return true;
+}
+
+/* -- snapping a loose 1×1 bit ------------------------------------
+   Search the plane top-down for a shape that accepts this material and
+   already touches the target cell orthogonally. First hit wins, so a
+   bit dropped into a crowded seam joins whatever is visually on top. */
+function snapMaterial(plane, mat, col, row){
+  if(!inBounds(col,row)) return false;
+  const list = track[plane];
+  for(let i=list.length-1; i>=0; i--){
+    const it = list[i];
+    if(it.t!=='shape' || !FAMILIES[it.fam].mats.includes(mat)) continue;
+    if(shapeHas(it, col, row)){
+      const k = ck(col-it.ax, row-it.ay);
+      if(it.cells.get(k) === mat) return false;   // already that material
+      it.cells.set(k, mat);                        // convert in place
+      return true;
+    }
+    const touches = [[1,0],[-1,0],[0,1],[0,-1]]
+      .some(([dx,dy]) => shapeHas(it, col+dx, row+dy));
+    if(touches){ it.cells.set(ck(col-it.ax, row-it.ay), mat); return true; }
+  }
+  const sh = {t:'shape', fam:MAT_HOME[mat], ax:col, ay:row, cells:new Map([[ck(0,0), mat]])};
+  list.push(sh);
+  return true;
+}
+
+/* -- stamps and actors ------------------------------------------- */
+function placeStamp(plane, id, col, row){
+  const list = track[plane];
+  const dup = list.findIndex(i=>i.t==='stamp' && i.ax===col && i.ay===row);
+  if(dup>=0){
+    if(list[dup].id===id) return false;
+    list.splice(dup,1);
+  }
+  const [w,h]=stampSize(id);
+  const ax = Math.max(stampAnchorCol(id), Math.min(COLS-1-(w-1-stampAnchorCol(id)), col));
+  const ay = Math.max(stampAnchorRow(id), Math.min(ROWS-1, row));
+  list.push({t:'stamp', id, ax, ay});
+  return true;
+}
+function placeActor(id, col, row){
+  if(!inBounds(col,row)) return false;
+  const list = track.actors;
+  const dup = list.findIndex(i=>i.ax===col && i.ay===row);
+  if(dup>=0){ list[dup].dir *= -1; return true; }   // re-place flips facing
+  list.push({t:'actor', id, ax:col, ay:row, dir:-1});
+  return true;
+}
+
+/* -- erasing: peel one cell, or Alt to take the whole shape -------- */
+function eraseAt(plane, col, row, whole){
+  const list = track[plane];
+  for(let i=list.length-1; i>=0; i--){
+    const it = list[i];
+    if(!itemCovers(it, col, row)) continue;
+    if(it.t==='shape' && !whole){
+      it.cells.delete(ck(col-it.ax, row-it.ay));
+      if(it.cells.size===0) list.splice(i,1);
+    } else {
+      list.splice(i,1);
+    }
+    return true;
+  }
+  return false;
+}
+
+/* -- trunk height -------------------------------------------------
+   Growing pushes the canopy up instead of driving the trunk into the
+   ground, which is what "taller tree" actually means. */
+function trunkColumn(sh){
+  const out=[];
+  for(const [k,mat] of sh.cells) if(mat==='TRUNK'){
+    const [dx,dy]=k.split(',').map(Number);
+    if(dx===0) out.push(dy);
+  }
+  return out.sort((a,b)=>a-b);            // ascending = top first
+}
+function adjustTrunk(plane, col, row, delta){
+  const list = track[plane];
+  for(let i=list.length-1; i>=0; i--){
+    const it = list[i];
+    if(it.t!=='shape' || it.fam!=='TREE' || !itemCovers(it,col,row)) continue;
+    const trunk = trunkColumn(it);
+    if(!trunk.length) return false;
+
+    if(delta > 0){
+      const top = trunk[0];
+      const lifted = new Map();
+      for(const [k,mat] of it.cells){
+        const [dx,dy]=k.split(',').map(Number);
+        lifted.set(mat==='LEAF' ? ck(dx,dy-1) : k, mat);
+      }
+      lifted.set(ck(0, top-1), 'TRUNK');
+      const test = {...it, cells:lifted};
+      if(shapeBounds(test).y0 < 0) return false;
+      it.cells = lifted;
+    } else {
+      if(trunk.length <= 1) return false;
+      const top = trunk[0];
+      const dropped = new Map();
+      for(const [k,mat] of it.cells){
+        const [dx,dy]=k.split(',').map(Number);
+        if(mat==='TRUNK' && dx===0 && dy===top) continue;
+        dropped.set(mat==='LEAF' ? ck(dx,dy+1) : k, mat);
+      }
+      const test = {...it, cells:dropped};
+      if(shapeBounds(test).y1 > ROWS-1) return false;
+      it.cells = dropped;
+    }
+    return true;
+  }
+  return false;
+}
+
+function layGround(){
+  for(let c=0;c<COLS;c++){
+    placeStamp('fg','GRASS', c, GROUND_ROW);
+    placeStamp('fg','DIRT',  c, GROUND_ROW+1);
+  }
+}
+
+/* ---------- 8. EDITOR STATE ---------- */
+const ed = {
+  camCol:0, curCol:0, curRow:GROUND_ROW-1, viewCols:16,
+  plane:'fg', tool:'BRICK',          // null tool = eraser
+  painting:false, paintErase:false, lastCell:''
+};
+const currentTool = ()=> ed.tool ? TOOL_BY_ID[ed.tool] : null;
+
+/* ---------- 9. RENDER ---------- */
+const view = document.getElementById('view');
+const vx = view.getContext('2d'); vx.imageSmoothingEnabled=false;
+const ruler = document.getElementById('ruler');
+const rx = ruler.getContext('2d'); rx.imageSmoothingEnabled=false;
+
+function setViewCols(n){
+  ed.viewCols = n;
+  view.width = n*TILE;
+  view.style.aspectRatio = `${n*TILE} / ${ROWS*TILE}`;
+  vx.imageSmoothingEnabled = false;
+  document.querySelectorAll('.zoom button').forEach(b=>
+    b.setAttribute('aria-pressed', String(+b.dataset.cols===n)));
+  scrollTo(ed.camCol);
+}
+
+function maskFor(cells, dx, dy, mat){
+  let m=0;
+  if(cells.get(ck(dx,dy-1))===mat) m|=N_;
+  if(cells.get(ck(dx+1,dy))===mat) m|=E_;
+  if(cells.get(ck(dx,dy+1))===mat) m|=S_;
+  if(cells.get(ck(dx-1,dy))===mat) m|=W_;
+  return m;
+}
+
+function drawShape(ctx, sh, camL, ox=0, oy=0){
+  for(const [k,mat] of sh.cells){
+    const [dx,dy]=k.split(',').map(Number);
+    const col = sh.ax+dx+ox, row = sh.ay+dy+oy;
+    ctx.drawImage(TILESET[mat][maskFor(sh.cells,dx,dy,mat)],
+                  (col-camL)*TILE, row*TILE);
+  }
+}
+
+function drawItem(ctx, it, camL){
+  if(it.t==='shape'){ drawShape(ctx, it, camL); return; }
+  if(it.t==='stamp'){
+    const b = itemBounds(it);
+    ctx.drawImage(SPRITES[it.id], (b.x0-camL)*TILE, b.y0*TILE);
+    return;
+  }
+  const img = it.dir>0 ? SPRITES[it.id+'_R'] || SPRITES[it.id] : SPRITES[it.id];
+  ctx.drawImage(img, (it.ax-camL)*TILE, it.ay*TILE);
+}
+
+function drawPlane(ctx, plane, alpha, camL, camR){
+  ctx.globalAlpha = alpha;
+  for(const it of track[plane]){
+    const b = itemBounds(it);
+    if(b.x1 < camL || b.x0 >= camR) continue;
+    drawItem(ctx, it, camL);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function draw(){
+  const camL = ed.camCol, camR = ed.camCol + ed.viewCols;
+  vx.fillStyle='#5C94FC'; vx.fillRect(0,0,view.width,view.height);
+  vx.fillStyle='rgba(255,255,255,0.09)';
+  vx.fillRect(0,(GROUND_ROW-2)*TILE,view.width,2*TILE);
+  vx.fillStyle='rgba(0,0,0,0.06)';
+  for(let c=0;c<=ed.viewCols;c++) vx.fillRect(c*TILE,0,1,view.height);
+  for(let r=0;r<=ROWS;r++)        vx.fillRect(0,r*TILE,view.width,1);
+
+  for(const p of PLANES) drawPlane(vx, p, ed.plane===p ? 1 : 0.45, camL, camR);
+
+  drawCursor(camL);
+  drawRuler();
+  syncReadout();
+}
+
+function drawCursor(camL){
+  const t = currentTool();
+  const cx0 = (ed.curCol-camL)*TILE, cy0 = ed.curRow*TILE;
+
+  if(t){
+    vx.globalAlpha = 0.5;
+    if(t.kind==='family'){
+      const ghost = makeShape(t.id, ed.curCol, ed.curRow);
+      drawShape(vx, ghost, camL);
+    } else if(t.kind==='mat'){
+      vx.drawImage(TILESET[t.id][0], cx0, cy0);
+    } else if(t.kind==='stamp'){
+      const [w,h]=stampSize(t.id);
+      vx.drawImage(SPRITES[t.id],
+        (ed.curCol - stampAnchorCol(t.id) - camL)*TILE,
+        (ed.curRow - stampAnchorRow(t.id))*TILE);
+    } else {
+      vx.drawImage(SPRITES[t.id], cx0, cy0);
+    }
+    vx.globalAlpha = 1;
+  }
+  vx.strokeStyle = t ? '#F0A818' : '#C0271B';
+  vx.lineWidth = 1;
+  vx.strokeRect(cx0+0.5, cy0+0.5, TILE-1, TILE-1);
+}
+
+function drawRuler(){
+  rx.fillStyle='#D8D1BE'; rx.fillRect(0,0,ruler.width,ruler.height);
+  rx.fillStyle='rgba(25,23,19,0.18)'; rx.fillRect(0,19,COLS,1);
+
+  const topmost = plane => {
+    const out = new Array(COLS).fill(null);
+    const note = (col,row,tint)=>{
+      if(col<0||col>=COLS) return;
+      if(out[col]===null || row<out[col].row) out[col]={row,tint};
+    };
+    for(const it of track[plane]){
+      if(it.t==='shape'){
+        for(const [k,mat] of it.cells){
+          const [dx,dy]=k.split(',').map(Number);
+          note(it.ax+dx, it.ay+dy, MATERIALS[mat].tint);
+        }
+      } else {
+        const b = itemBounds(it);
+        for(let c=b.x0;c<=b.x1;c++) note(c, b.y0, STAMP_TINT[it.id]||'#FFF');
+      }
+    }
+    return out;
+  };
+
+  const bg = topmost('bg'), fg = topmost('fg');
+  for(let c=0;c<COLS;c++){
+    if(bg[c]){ const h=Math.max(1,Math.round((1-bg[c].row/ROWS)*15));
+      rx.fillStyle=bg[c].tint; rx.fillRect(c,18-h,1,h); }
+    if(fg[c]){ const y=Math.round((fg[c].row/ROWS)*17);
+      rx.fillStyle=fg[c].tint; rx.fillRect(c,21+y,1,18-y); }
+  }
+  rx.fillStyle='#C87840';
+  for(const a of track.actors) rx.fillRect(a.ax,20,1,2);
+
+  rx.fillStyle='rgba(25,23,19,0.3)';
+  for(let c=0;c<COLS;c+=16) rx.fillRect(c,18,1,3);
+  rx.fillStyle='#C0271B';
+  rx.fillRect(ed.camCol,0,ed.viewCols,2);
+  rx.fillRect(ed.camCol,38,ed.viewCols,2);
+  rx.fillRect(ed.camCol,0,1,40);
+  rx.fillRect(ed.camCol+ed.viewCols-1,0,1,40);
+  rx.fillStyle='#F0A818'; rx.fillRect(ed.curCol,2,1,36);
+}
+
+function syncReadout(){
+  const t = currentTool();
+  document.getElementById('rCol').textContent = ed.curCol;
+  document.getElementById('rRow').textContent = ed.curRow;
+  document.getElementById('rLayer').textContent = PLANE_LABEL[ed.plane];
+  document.getElementById('rPiece').textContent = t ? t.name : 'Eraser';
+  document.getElementById('rBg').textContent = track.bg.length;
+  document.getElementById('rFg').textContent = track.fg.length;
+  document.getElementById('rAc').textContent = track.actors.length;
+}
+const say = m => { document.getElementById('status').textContent = m; };
+
+/* ---------- 10. PALETTE UI ---------- */
+function swatch(tool){
+  const {c,x} = surface(40,36);
+  if(!tool){
+    px(x,'#C0271B',10,16,20,4); px(x,'#C0271B',18,8,4,20);
+    px(x,'#E7E1D2',12,17,16,2);
+    return c;
+  }
+  if(tool.kind==='family'){
+    const sh = makeShape(tool.id, 0, 0);
+    const b = shapeBounds(sh);
+    const w=(b.x1-b.x0+1)*TILE, h=(b.y1-b.y0+1)*TILE;
+    const s = Math.min(38/w, 34/h, 1);
+    x.save(); x.scale(s,s);
+    x.translate((40/s-w)/2 - b.x0*TILE, (35/s-h) - b.y0*TILE);
+    drawShape(x, sh, 0);
+    x.restore();
+    return c;
+  }
+  if(tool.kind==='mat'){ x.drawImage(TILESET[tool.id][0],12,10); return c; }
+  const img = SPRITES[tool.id];
+  const s = Math.min(38/img.width, 34/img.height, 2);
+  const w=Math.round(img.width*s), h=Math.round(img.height*s);
+  x.drawImage(img, Math.round((40-w)/2), 35-h, w, h);
+  return c;
+}
+
+function buildPalette(){
+  const host = document.getElementById('paletteList');
+  const section = label => {
+    const p=document.createElement('p'); p.className='eyebrow gap'; p.textContent=label;
+    host.appendChild(p);
+  };
+  const row = tool => {
+    const b=document.createElement('button');
+    b.className='piece'; b.type='button'; b.dataset.id = tool ? tool.id : '';
+    const n=document.createElement('span'); n.className='num';
+    n.textContent = tool ? tool.key.toUpperCase() : '0';
+    const cv = swatch(tool); cv.style.width='40px'; cv.style.height='36px';
+    const nm=document.createElement('span'); nm.className='nm';
+    nm.textContent = tool ? tool.name : 'Eraser';
+    const sz=document.createElement('span'); sz.className='sz';
+    sz.textContent = tool ? tool.note : 'peel';
+    b.append(n,cv,nm,sz);
+    b.onclick = ()=> selectTool(tool ? tool.id : null);
+    host.appendChild(b);
+  };
+  section('Shapes');
+  TOOLS.filter(t=>t.kind==='family').forEach(row);
+  section('Fixed');
+  TOOLS.filter(t=>t.kind==='stamp').forEach(row);
+  section('1×1 bits');
+  TOOLS.filter(t=>t.kind==='mat').forEach(row);
+  section('Actors');
+  TOOLS.filter(t=>t.kind==='actor').forEach(row);
+  section('Tool');
+  row(null);
+  selectTool(ed.tool);
+}
+
+function selectTool(id){
+  ed.tool = id;
+  const t = id ? TOOL_BY_ID[id] : null;
+  if(t && t.kind==='actor' && ed.plane!=='actors') setPlane('actors', true);
+  if(t && t.kind!=='actor' && ed.plane==='actors') setPlane('fg', true);
+  document.querySelectorAll('.piece').forEach(b=>
+    b.setAttribute('aria-pressed', String((b.dataset.id||null)===(id||null))));
+  say(t ? `Holding ${t.name}` : 'Eraser — click peels one cell, Alt takes the whole shape');
+  draw();
+}
+function setPlane(plane, quiet){
+  ed.plane = plane;
+  document.getElementById('planeBg').setAttribute('aria-pressed', String(plane==='bg'));
+  document.getElementById('planeFg').setAttribute('aria-pressed', String(plane==='fg'));
+  document.getElementById('planeAc').setAttribute('aria-pressed', String(plane==='actors'));
+  if(!quiet) say(`Editing ${PLANE_LABEL[plane].toLowerCase()} plane`);
+  draw();
+}
+document.getElementById('planeBg').onclick = ()=>setPlane('bg');
+document.getElementById('planeFg').onclick = ()=>setPlane('fg');
+document.getElementById('planeAc').onclick = ()=>setPlane('actors');
+
+/* ---------- 11. INPUT ---------- */
+function cellFromEvent(e){
+  const r = view.getBoundingClientRect();
+  const cx = Math.floor(((e.clientX-r.left)/r.width)  * ed.viewCols);
+  const cy = Math.floor(((e.clientY-r.top) /r.height) * ROWS);
+  return { col: ed.camCol + Math.max(0,Math.min(ed.viewCols-1,cx)),
+           row: Math.max(0,Math.min(ROWS-1,cy)) };
+}
+
+function stamp(col,row,erase,alt){
+  const t = currentTool();
+  let changed = false;
+  if(erase || !t){
+    changed = eraseAt(ed.plane, col, row, !!alt);
+  } else if(t.kind==='family'){
+    changed = placeFamily(ed.plane, t.id, col, row);
+  } else if(t.kind==='mat'){
+    changed = snapMaterial(ed.plane, t.id, col, row);
+  } else if(t.kind==='stamp'){
+    changed = placeStamp(ed.plane, t.id, col, row);
+  } else if(t.kind==='actor'){
+    changed = placeActor(t.id, col, row);
+  }
+  if(changed) draw();
+  return changed;
+}
+
+view.addEventListener('contextmenu', e=>e.preventDefault());
+view.addEventListener('pointerdown', e=>{
+  view.focus(); view.setPointerCapture(e.pointerId);
+  const {col,row} = cellFromEvent(e);
+  ed.curCol=col; ed.curRow=row;
+  ed.painting = true;
+  ed.paintErase = (e.button===2) || e.shiftKey;
+  ed.lastCell = col+','+row;
+  stamp(col,row,ed.paintErase,e.altKey);
+  draw();
+});
+view.addEventListener('pointermove', e=>{
+  const {col,row} = cellFromEvent(e);
+  if(col===ed.curCol && row===ed.curRow) return;
+  ed.curCol=col; ed.curRow=row;
+  const key = col+','+row;
+  if(ed.painting && key!==ed.lastCell){
+    ed.lastCell = key;
+    // dragging a whole family would carpet the track; drag paints bits only
+    const t = currentTool();
+    if(ed.paintErase || !t || t.kind!=='family') stamp(col,row,ed.paintErase,e.altKey);
+  }
+  draw();
+});
+const stopPaint = ()=>{ ed.painting=false; };
+view.addEventListener('pointerup', stopPaint);
+view.addEventListener('pointercancel', stopPaint);
+window.addEventListener('blur', stopPaint);
+
+function scrollTo(col){ ed.camCol = Math.max(0, Math.min(COLS-ed.viewCols, col)); }
+function moveCursor(d){
+  ed.curCol = Math.max(0, Math.min(COLS-1, ed.curCol+d));
+  if(ed.curCol < ed.camCol) scrollTo(ed.curCol);
+  if(ed.curCol > ed.camCol+ed.viewCols-1) scrollTo(ed.curCol-ed.viewCols+1);
+}
+
+window.addEventListener('keydown', e=>{
+  if(e.target.tagName === 'INPUT') return;
+  const step = e.shiftKey ? 8 : 1;
+  const k = e.key.toLowerCase();
+  switch(e.key){
+    case 'Tab': {
+      const i = PLANES.indexOf(ed.plane);
+      setPlane(PLANES[(i + (e.shiftKey?2:1)) % 3]);
+      break;
+    }
+    case 'ArrowLeft':  moveCursor(-step); break;
+    case 'ArrowRight': moveCursor( step); break;
+    case 'ArrowUp':    ed.curRow = Math.max(0, ed.curRow-1); break;
+    case 'ArrowDown':  ed.curRow = Math.min(ROWS-1, ed.curRow+1); break;
+    case 'Home':       ed.curCol = 0; scrollTo(0); break;
+    case 'End':        ed.curCol = COLS-1; scrollTo(COLS); break;
+    case ' ': case 'Enter': stamp(ed.curCol, ed.curRow, false, e.altKey); break;
+    case ']':
+      say(adjustTrunk(ed.plane, ed.curCol, ed.curRow, +1)
+        ? 'Trunk raised' : 'No tree here, or no room above'); break;
+    case '[':
+      say(adjustTrunk(ed.plane, ed.curCol, ed.curRow, -1)
+        ? 'Trunk lowered' : 'No tree here, or trunk already minimum'); break;
+    case '0': selectTool(null); return;
+    default:
+      if(k==='x' || e.key==='Backspace' || e.key==='Delete'){
+        stamp(ed.curCol, ed.curRow, true, e.altKey); break;
+      }
+      if(TOOL_BY_KEY[k]){ selectTool(TOOL_BY_KEY[k].id); return; }
+      return;
+  }
+  e.preventDefault();
+  draw();
+});
+
+ruler.addEventListener('pointerdown', e=>{
+  const r = ruler.getBoundingClientRect();
+  const col = Math.round(((e.clientX-r.left)/r.width)*COLS);
+  ed.curCol = Math.max(0, Math.min(COLS-1, col));
+  scrollTo(ed.curCol - Math.floor(ed.viewCols/2));
+  draw();
+});
+document.querySelectorAll('.zoom button').forEach(b=>{
+  b.onclick = ()=>{ setViewCols(+b.dataset.cols); draw(); };
+});
+
+/* ---------- 12. SAVE / LOAD ---------- */
+function packItem(it){
+  if(it.t==='shape')
+    return {t:'g', fam:it.fam, x:it.ax, y:it.ay,
+            c:[...it.cells].map(([k,m])=>[...k.split(',').map(Number), m])};
+  if(it.t==='stamp') return {t:'s', p:it.id, x:it.ax, y:it.ay};
+  return {t:'a', p:it.id, x:it.ax, y:it.ay, d:it.dir};
+}
+function unpackItem(o){
+  if(o.t==='g'){
+    if(!FAMILIES[o.fam]) return null;
+    const cells = new Map();
+    for(const [dx,dy,m] of (o.c||[])) if(MATERIALS[m]) cells.set(ck(dx,dy), m);
+    if(!cells.size) return null;
+    return {t:'shape', fam:o.fam, ax:o.x|0, ay:o.y|0, cells};
+  }
+  if(o.t==='s') return SPRITES[o.p] ? {t:'stamp', id:o.p, ax:o.x|0, ay:o.y|0} : null;
+  if(o.t==='a') return SPRITES[o.p] ? {t:'actor', id:o.p, ax:o.x|0, ay:o.y|0, d:0, dir:o.d===1?1:-1} : null;
+  return null;
+}
+
+function serialize(){
+  return {
+    format:'onelane-design', version:3,
+    name: document.getElementById('trackName').value.trim() || 'UNTITLED',
+    cols:COLS, rows:ROWS, tile:TILE, anchor:'centre-column-base-row',
+    layers:{ bg:track.bg.map(packItem), fg:track.fg.map(packItem),
+             actors:track.actors.map(packItem) }
+  };
+}
+
+/* v1/v2 conversion. Old fixed-footprint pieces become seeded shapes at
+   the same anchor. Sizes differ, so the result is close, not identical. */
+const LEGACY = {GRASS:['s','GRASS'], DIRT:['s','DIRT'], CLOUD:['s','CLOUD'],
+  BRICK:['g','BRICK'], BUSH:['g','BUSH'], TREE:['g','TREE'],
+  HILL:['g','HILL'], HILLR:['g','HILL'], HILL2:['g','HILL'], HILL3:['g','HILL']};
+const V1_H = {GRASS:1,DIRT:1,BRICK:1,BUSH:1,TREE:2,HILL:2,HILLR:2};
+
+function deserialize(data){
+  if(!data || data.format!=='onelane-design') throw new Error('Not a design file');
+  track.bg.length=0; track.fg.length=0; track.actors.length=0;
+  let skipped = 0;
+
+  if(data.version===3 && data.layers){
+    for(const plane of PLANES)
+      for(const o of (data.layers[plane]||[])){
+        const it = unpackItem(o);
+        if(it) track[plane].push(it); else skipped++;
+      }
+  } else {
+    const legacy = (plane, id, ax, ay) => {
+      const map = LEGACY[id];
+      if(!map){ skipped++; return; }
+      if(map[0]==='s') placeStamp(plane, map[1], ax, ay);
+      else placeFamily(plane, map[1], ax, ay);
+    };
+    if(data.version===2 && data.layers){
+      (data.layers.bg||[]).forEach(it=>legacy('bg', it.p, it.x, it.y));
+      (data.layers.fg||[]).forEach(it=>legacy('fg', it.p, it.x, it.y));
+    } else if(Array.isArray(data.pieces)){
+      for(const it of data.pieces){
+        const h = V1_H[it.p];
+        if(!h){ skipped++; continue; }
+        legacy('fg', it.p, it.x|0, (it.y|0)+h-1);   // v1 stored top-left
+      }
+    } else throw new Error('No layers or pieces');
+  }
+
+  document.getElementById('trackName').value = (data.name||'UNTITLED').slice(0,24);
+  return skipped;
+}
+
+function download(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+const safeName = ()=> (document.getElementById('trackName').value||'track')
+  .replace(/[^A-Za-z0-9_-]+/g,'_').toLowerCase();
+
+document.getElementById('btnExport').onclick = ()=>{
+  const d = serialize();
+  const n = d.layers.bg.length + d.layers.fg.length + d.layers.actors.length;
+  download(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}), safeName()+'.json');
+  say(`Exported ${n} objects`);
+};
+document.getElementById('btnImport').onclick = ()=> document.getElementById('fileIn').click();
+document.getElementById('fileIn').onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const skipped = deserialize(JSON.parse(await f.text()));
+    draw();
+    say(skipped ? `Loaded. ${skipped} objects dropped.` : 'Loaded');
+  }catch(err){ say(`Import failed: ${err.message}`); }
+  e.target.value='';
+};
+
+document.getElementById('btnPng').onclick = ()=>{
+  const {c,x} = surface(COLS*TILE, ROWS*TILE);
+  x.fillStyle='#5C94FC'; x.fillRect(0,0,c.width,c.height);
+  for(const plane of PLANES) for(const it of track[plane]) drawItem(x, it, 0);
+  c.toBlob(b=>{ download(b, safeName()+'.png');
+    say(`Exported PNG ${COLS*TILE} × ${ROWS*TILE}`); });
+};
+
+document.getElementById('btnGround').onclick = ()=>{ layGround(); draw(); say('Ground relaid'); };
+document.getElementById('btnClearLayer').onclick = ()=>{
+  track[ed.plane].length=0; draw(); say(`Cleared ${PLANE_LABEL[ed.plane].toLowerCase()} plane`); };
+document.getElementById('btnClear').onclick = ()=>{
+  PLANES.forEach(p=>track[p].length=0); draw(); say('Track cleared'); };
+
+/* ---------- 13. BOOT ---------- */
+document.getElementById('rulerEnd').textContent = 'End ' + (COLS-1);
+setViewCols(16);
+buildPalette();
+layGround();
+setPlane('fg', true);
+draw();
+say('Ready. Drop a shape, then snap 1×1 bits onto it.');
+</script>
+</body>
+</html>
