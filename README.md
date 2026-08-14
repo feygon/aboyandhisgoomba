@@ -392,6 +392,22 @@ Older save files from v1 through v5 still import. Piece sizes changed between
 versions, so an old file converts to something close rather than identical.
 Re-save anything you care about.
 
+### Old levels with the flagpole in the wrong place
+
+The castle-and-flagpole separation rule arrived after levels had already been
+built, so a file saved before it can hold a flagpole behind the castle — a
+level nothing can finish.
+
+Loading such a file **repairs it rather than refusing it**. The flagpole slides
+to the nearest legal column, the status line says how many levels were
+corrected, and **the moved piece wears an amber bracket until the next time you
+press Play**, so the change is something you can see rather than something you
+have to be told. Nothing is deleted.
+
+The same check runs again when you press Play, because importing is not the
+only way a level can reach the game — a hand-edited file or a level built
+before the rule and never re-imported arrives that way instead.
+
 ---
 
 ## 14. File layout

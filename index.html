@@ -940,9 +940,10 @@ function spawnBoyAtCastle(){
 const MIN_RUN=12;
 const stampLeft =it=>it.ax-sAncCol(it.id);
 const stampRight=it=>it.ax+(sW(it.id)-1-sAncCol(it.id));
-function findStamp(id){
+function findStamp(id,lv){
+  const L=lv||track;
   for(const p of PLANES){
-    const it=track[p].find(i=>i.t==='stamp'&&i.id===id);
+    const it=L[p].find(i=>i.t==='stamp'&&i.id===id);
     if(it) return it;
   }
   return null;
@@ -950,16 +951,62 @@ function findStamp(id){
 /* One source of truth for where a landmark may legally sit. The ghost under
    the cursor and the piece that actually lands both go through this, so what
    the child sees and what he gets can never disagree. */
-function clampStampCol(id,col){
+function clampStampCol(id,col,lv){
   const lo=sAncCol(id), hi=COLS-1-(sW(id)-1-sAncCol(id));
   let ax=Math.max(lo,Math.min(hi,col));
   if(id==='FLAG'||id==='CASTLE'){
-    const other=findStamp(id==='FLAG'?'CASTLE':'FLAG');
+    const other=findStamp(id==='FLAG'?'CASTLE':'FLAG',lv);
     if(other) ax = id==='FLAG'
       ? Math.max(ax, stampRight(other)+MIN_RUN+sAncCol(id))
       : Math.min(ax, stampLeft(other)-MIN_RUN-(sW(id)-1-sAncCol(id)));
   }
   return ax;
+}
+
+/* ---------- validating old saves ----------
+   The separation rule arrived after levels had already been built and saved,
+   so a file from before it can hold a flagpole behind the castle — a level
+   nothing can finish. Placement rules only guard new placements; loading is
+   the other door into the level, and it needs the same guard.
+
+   Repair rather than reject: refusing the file would leave a child with work
+   he cannot open and no way to fix it. Repaired pieces are remembered by
+   object identity in ed.repaired and drawn highlighted until the next run, so
+   the change is visible rather than silent. Editing a repaired piece replaces
+   the object via mutable(), which drops it out of the set naturally. */
+function repairLevel(lv){
+  const moved=[];
+  const castle=findStamp('CASTLE',lv), flag=findStamp('FLAG',lv);
+  if(!castle||!flag) return moved;
+  const gap=stampLeft(flag)-stampRight(castle);
+  if(gap>=MIN_RUN) return moved;
+  /* Prefer moving the flag right; if the castle is jammed so far right that
+     there is no legal column left for it, move the castle instead. */
+  const wantFlag=clampStampCol('FLAG',flag.ax,lv);
+  if(stampColOK('FLAG',wantFlag)) moved.push(replaceStamp(lv,flag,wantFlag));
+  else {
+    const wantCastle=clampStampCol('CASTLE',castle.ax,lv);
+    if(stampColOK('CASTLE',wantCastle)) moved.push(replaceStamp(lv,castle,wantCastle));
+  }
+  return moved;
+}
+/* Replace rather than write through: items are immutable and may be shared
+   with a duplicated level or an undo snapshot (C-4). */
+function replaceStamp(lv,it,ax){
+  for(const p of PLANES){
+    const i=lv[p].indexOf(it);
+    if(i<0) continue;
+    const copy={...it,ax};
+    lv[p][i]=copy;
+    return {id:it.id,from:it.ax,to:ax,item:copy};
+  }
+  return {id:it.id,from:it.ax,to:ax,item:it};
+}
+function repairProject(){
+  let n=0;
+  for(const lv of project.levels)
+    for(const m of repairLevel(lv)){ ed.repaired.add(m.item); n++; }
+  return n;
 }
 const stampColOK=(id,ax)=>ax>=sAncCol(id)&&ax<=COLS-1-(sW(id)-1-sAncCol(id));
 
@@ -1238,7 +1285,9 @@ document.getElementById('btnMute').onclick=e=>{
 const ed={camCol:0,curCol:0,curRow:GROUND_ROW-1,viewCols:16,
   plane:'fg',tool:'family:BRICK',lastFamily:'BRICK',
   painting:false,paintErase:false,lastCell:'',
-  scrubbing:false,panning:false,panX:0,panCam:0};
+  scrubbing:false,panning:false,panX:0,panCam:0,
+  /* items a load-time repair moved, held by identity so no item is mutated */
+  repaired:new Set()};
 
 /* ---------- render ---------- */
 const view=document.getElementById('view');
@@ -1323,8 +1372,25 @@ function draw(){
   // depth tint already separates the planes; dimming just marks focus
   for(const p of PLANES) drawPlane(vx,p,ed.plane===p?1:0.62,camL,camR);
   drawLedgeMarks(camL,camR);
+  drawRepairMarks(camL,camR);
   drawCursor(camL);
   drawRuler(); syncReadout();
+}
+/* A piece a load-time repair moved wears a bracket until the next run, so the
+   change is something you can see rather than something you must be told. */
+function drawRepairMarks(camL,camR){
+  if(!ed.repaired.size) return;
+  for(const p of PLANES) for(const it of track[p]){
+    if(!ed.repaired.has(it)) continue;
+    const b=itemBounds(it);
+    if(b.x1<camL||b.x0>=camR) continue;
+    const X=(b.x0-camL)*TILE, Y=b.y0*TILE;
+    const W=(b.x1-b.x0+1)*TILE, H=(b.y1-b.y0+1)*TILE;
+    vx.strokeStyle='#F0A818'; vx.lineWidth=2;
+    vx.strokeRect(X-1.5,Y-1.5,W+3,H+3);
+    vx.fillStyle='rgba(240,168,24,0.18)';
+    vx.fillRect(X,Y,W,H);
+  }
 }
 function drawCursor(camL){
   const t=toolByRef(ed.tool);
@@ -1911,8 +1977,14 @@ document.getElementById('fileIn').onchange=async e=>{
   const f=e.target.files[0]; if(!f) return;
   try{
     const skipped=deserialize(JSON.parse(await f.text()));
+    ed.repaired.clear();
+    const fixed=repairProject();
     renderLibrary(); renderSlots(); draw();
-    say(skipped?`Loaded. ${skipped} objects dropped.`:'Loaded'); sfx('level');
+    const notes=[];
+    if(skipped) notes.push(`${skipped} objects dropped`);
+    if(fixed) notes.push(`${fixed} level${fixed>1?'s':''} had the flagpole moved clear of the castle — it is highlighted until you press Play`);
+    say(notes.length?`Loaded. ${notes.join('. ')}.`:'Loaded');
+    sfx(fixed?'nope':'level');
   }catch(err){ say(`Import failed: ${err.message}`); sfx('nope'); }
   e.target.value='';
 };
@@ -1956,6 +2028,14 @@ document.getElementById('btnPlaySave').onclick=()=>{
    the level is actually playable and says what is missing, rather than
    pretending to start something. */
 document.getElementById('btnPlay').onclick=()=>{
+  /* Second checkpoint. Import is the usual door into a bad level, but not the
+     only one — a hand-edited file, or a level built before the rule and never
+     re-imported, reaches the runtime this way instead. Repair here too rather
+     than trusting that loading was the only path in. */
+  const fixed=repairLevel(track);
+  for(const m of fixed) ed.repaired.add(m.item);
+  if(fixed.length){ draw(); say('Moved the flagpole clear of the castle so the level can be finished'); }
+  else ed.repaired.clear();     /* the run starts clean: highlight ends here */
   const boy=track.actors.find(a=>a.id==='PLAYER');
   const flag=PLANES.some(p=>track[p].some(i=>i.t==='stamp'&&i.id==='FLAG'));
   if(!boy){ say('No start point yet — place the boy (P), or drop a castle and he appears at its gate'); sfx('nope'); return; }
