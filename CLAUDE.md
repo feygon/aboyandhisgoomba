@@ -32,6 +32,31 @@ Confirm the copyright holder in `LICENSE` before pushing. It currently reads
 "Feygon Nickerson"; the operating entity may be Richard Nickerson Consulting,
 LLC instead.
 
+## Who this is for — read before making design tradeoffs
+
+**A five-year-old.** This editor is built for the author's child to edit
+levels and build things with.
+
+**A rule a five-year-old can predict beats a rule that is authentic.** Where
+the two conflict, legibility wins. Two runtime decisions already turn on this
+and should not be "corrected" toward the genre by a later session:
+
+- **Every front-plane cell is solid, whatever its material.** Trees and
+  bushes would normally be scenery you run past. The rule is instead *"if you
+  drew it, you can stand on it."* A child who draws a tree and cannot stand on
+  it has been told the drawing lied.
+- **Enemies never despawn.** Super Mario Bros. removes enemies that leave the
+  screen. Here nothing the child placed disappears. *"Everything you made
+  stays there"* is a rule a five-year-old can hold.
+
+This governs the *rules*, not the *pacing* — running and jumping still follow
+Super Mario Bros., via the tuned constants in `structure-notes.py`.
+
+Corollary: **no punishing mechanics** — no lives running out, no timer, no
+game over — without asking first.
+
+Full reasoning in `docs/superpowers/specs/2026-08-13-runtime-design.md`.
+
 ## Architecture, briefly
 
 Read `README.md` first — it is thorough and current.
