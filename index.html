@@ -947,23 +947,30 @@ function findStamp(id){
   }
   return null;
 }
-function placeStamp(plane,id,col,row){
+/* One source of truth for where a landmark may legally sit. The ghost under
+   the cursor and the piece that actually lands both go through this, so what
+   the child sees and what he gets can never disagree. */
+function clampStampCol(id,col){
   const lo=sAncCol(id), hi=COLS-1-(sW(id)-1-sAncCol(id));
   let ax=Math.max(lo,Math.min(hi,col));
+  if(id==='FLAG'||id==='CASTLE'){
+    const other=findStamp(id==='FLAG'?'CASTLE':'FLAG');
+    if(other) ax = id==='FLAG'
+      ? Math.max(ax, stampRight(other)+MIN_RUN+sAncCol(id))
+      : Math.min(ax, stampLeft(other)-MIN_RUN-(sW(id)-1-sAncCol(id)));
+  }
+  return ax;
+}
+const stampColOK=(id,ax)=>ax>=sAncCol(id)&&ax<=COLS-1-(sW(id)-1-sAncCol(id));
+
+function placeStamp(plane,id,col,row){
+  const ax=clampStampCol(id,col);
   const ay=Math.max(sAncRow(id),Math.min(ROWS-1,row));
   /* Validate BEFORE the unique-removal below, or a refused placement would
      delete the landmark it was meant to move and leave nothing behind. */
-  if(id==='FLAG'||id==='CASTLE'){
-    const other=findStamp(id==='FLAG'?'CASTLE':'FLAG');
-    if(other){
-      ax = id==='FLAG'
-        ? Math.max(ax, stampRight(other)+MIN_RUN+sAncCol(id))
-        : Math.min(ax, stampLeft(other)-MIN_RUN-(sW(id)-1-sAncCol(id)));
-      if(ax<lo||ax>hi){
-        say(`No room — the ${id==='FLAG'?'castle':'flagpole'} is too close to the end of the track. Move it first.`);
-        sfx('nope'); return false;
-      }
-    }
+  if(!stampColOK(id,ax)){
+    say(`No room — the ${id==='FLAG'?'castle':'flagpole'} is too close to the end of the track. Move it first.`);
+    sfx('nope'); return false;
   }
   if(STAMPS[id].unique)
     for(const p of PLANES)
@@ -1334,8 +1341,12 @@ function drawCursor(camL){
       vx.drawImage(tilesFor(t.id,isDeep)[0],cx0,cy0);
     } else if(t.kind==='stamp'){
       const img=STAMPS[t.id].img;
+      /* The ghost obeys the same separation rule as the placement, so a
+         flagpole in hand visibly refuses to come nearer than MIN_RUN columns
+         to the castle instead of snapping only once you let go. */
+      const gx=clampStampCol(t.id,ed.curCol);
       vx.drawImage(isDeep?deep(img):img,
-        (ed.curCol-sAncCol(t.id)-camL)*TILE,(ed.curRow-sAncRow(t.id))*TILE);
+        (gx-sAncCol(t.id)-camL)*TILE,(ed.curRow-sAncRow(t.id))*TILE);
     } else {
       drawActor(vx,{t:'actor',id:t.id,ax:ed.curCol,ay:ed.curRow,dir:-1,h:2},camL,false);
     }
