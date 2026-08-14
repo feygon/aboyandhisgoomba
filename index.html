@@ -9,6 +9,7 @@
     --paper:#E7E1D2; --paper-2:#D8D1BE;
     --ink:#191713;   --ink-2:#5C574B;
     --plate:#C0271B; --sky:#5C94FC; --amber:#F0A818;
+    --go:#2E8424;    --goHi:#3FA02C;
     --display:"Arial Black","Helvetica Neue",Impact,sans-serif;
     --util:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
@@ -119,6 +120,19 @@
   button.act[disabled]{opacity:.4;cursor:default;box-shadow:2px 2px 0 rgba(25,23,19,.3)}
   button.act[disabled]:hover{background:var(--paper)}
 
+  /* Icon buttons: the pixel canvas sits beside the words, never replaces
+     them — the label is what makes the control findable. */
+  button.act,button.mini{display:inline-flex;align-items:center;gap:6px}
+  button canvas.ico{image-rendering:pixelated;display:block;flex:none;
+    width:16px;height:16px}
+  button.act.play{font-size:15px;padding:10px 20px;gap:9px;
+    background:var(--go);color:var(--paper);border-width:3px;
+    box-shadow:3px 3px 0 var(--ink)}
+  button.act.play:hover{background:var(--goHi)}
+  button.act.play:active{transform:translate(3px,3px);box-shadow:none}
+  button.act.play canvas.ico{width:26px;height:26px}
+  button.mini canvas.ico{width:13px;height:13px}
+
   .library{margin-top:14px;border-top:3px solid var(--ink);padding-top:10px;
     display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media (max-width:700px){ .library{grid-template-columns:1fr} }
@@ -190,7 +204,7 @@
         <div class="slots" id="slotGrid"></div>
         <div class="slotbar">
           <input id="slotName" placeholder="Name (optional)" maxlength="18" aria-label="Slot name">
-          <button class="mini" id="btnCapture" type="button">Save</button>
+          <button class="mini" id="btnCapture" type="button">To slot</button>
           <button class="mini" id="btnClearSlot" type="button">Clear</button>
         </div>
       </div>
@@ -222,6 +236,7 @@
       </div>
 
       <div class="controls">
+        <button class="act play" id="btnPlay" type="button">Play</button>
         <button class="act" id="btnUndo" disabled>Undo</button>
         <button class="act" id="btnRedo" disabled>Redo</button>
         <button class="act" id="btnExport">Export project</button>
@@ -242,6 +257,7 @@
             <button class="mini" id="btnLevelNew" type="button">New</button>
             <button class="mini" id="btnLevelDup" type="button">Duplicate</button>
             <button class="mini" id="btnLevelDel" type="button">Delete</button>
+            <button class="mini ico" id="btnLevelSave" type="button">Save level</button>
           </div>
         </section>
         <section aria-labelledby="hPlay">
@@ -252,6 +268,7 @@
             <button class="mini" id="btnPlayNew" type="button">New</button>
             <button class="mini" id="btnPlayAdd" type="button">Add level</button>
             <button class="mini" id="btnPlayDel" type="button">Delete</button>
+            <button class="mini ico" id="btnPlaySave" type="button">Save playlist</button>
           </div>
           <ol class="queue" id="queue"></ol>
         </section>
@@ -260,9 +277,9 @@
       <div class="keys">
         <span><kbd>1</kbd>–<kbd>5</kbd> shapes</span>
         <span><kbd>6</kbd> cloud · <kbd>C</kbd> castle · <kbd>F</kbd> flag</span>
-        <span><kbd>7</kbd>–<kbd>9</kbd><kbd>B</kbd> actors</span>
+        <span><kbd>P</kbd> the boy · <kbd>7</kbd>–<kbd>9</kbd><kbd>B</kbd> actors</span>
         <span><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>U</kbd><kbd>T</kbd><kbd>Y</kbd> bits</span>
-        <span><kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>8</kbd> slot · <kbd>S</kbd> save</span>
+        <span><kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>8</kbd> slot · <kbd>S</kbd> to slot</span>
         <span><kbd>[</kbd><kbd>]</kbd> height</span>
         <span><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo</span>
         <span><kbd>Alt</kbd>+erase ground digs the column</span>
@@ -304,7 +321,19 @@ const C = {
   stoneHi:'#D8C0A0', stoneMid:'#A88868', stoneLo:'#6C5038', stoneDark:'#40301E',
   poleHi:'#C8E8C8',  poleMid:'#88B888',  poleLo:'#487848',
   flagMid:'#28A828', flagHi:'#58D858',   flagLo:'#186818',
-  merlonHi:'#E8A870',merlonMid:'#C87A3C',merlonLo:'#8A4A18'
+  merlonHi:'#E8A870',merlonMid:'#C87A3C',merlonLo:'#8A4A18',
+  /* the boy: red cap, cream shirt, denim dungarees */
+  capHi:'#F85838',   capMid:'#C42818',   capLo:'#801008',
+  clothHi:'#FFF8E8', clothMid:'#E8D8B0', clothLo:'#B09868',
+  denimHi:'#6C9CE8', denimMid:'#2A50B8', denimLo:'#16306E',
+  hairMid:'#6E4418', hairLo:'#3A2408',   shoeMid:'#4A2E0E',
+  /* button icons */
+  diskYHi:'#F8D848', diskYMid:'#D0A018', diskYLo:'#7A5C08',
+  diskBHi:'#78A8F8', diskBMid:'#2858C8', diskBLo:'#123070',
+  diskShut:'#D0D4DC', diskShutLo:'#78808F', diskLabel:'#FFF8E8',
+  goHi:'#78E048',    goMid:'#38A828',    goLo:'#186818',
+  noHi:'#F86048',    noMid:'#D02010',    noLo:'#801008',
+  inkIcon:'#191713'
 };
 function surface(w,h){
   const c=document.createElement('canvas'); c.width=w; c.height=h;
@@ -543,6 +572,40 @@ function makeGoomba(){
   px(x,C.gBodyLo,1,12,6,1); px(x,C.gBodyLo,9,12,6,1);
   return c;
 }
+/* The boy. Sixteen by twenty-four, facing left like every other actor.
+   A platformer cap and dungarees crossed with the sleeves-and-sneakers
+   look of an adventure-game kid: red cap, cream shirt, denim, brown
+   shoes. Drawn from scratch here, same as the goomba. */
+function makePlayer(){
+  const {c,x}=surface(16,24);
+  /* hair at the nape, then the face over it */
+  px(x,C.hairMid,10,4,4,5); px(x,C.hairLo,12,6,2,3);
+  px(x,C.skinMid,3,5,8,5);  px(x,C.skinHi,4,5,5,1);
+  px(x,C.skinLo,3,9,8,1);   px(x,C.skinMid,2,7,1,2);   /* nose, to the left */
+  px(x,C.eyeW,5,6,3,3);     px(x,C.pupil,5,7,2,2);
+  px(x,C.pupil,4,10,3,1);                              /* mouth */
+  /* cap last, so the brim sits over the brow */
+  px(x,C.capMid,5,0,7,1); px(x,C.capMid,4,1,9,1); px(x,C.capMid,3,2,10,2);
+  px(x,C.capHi,5,1,4,1);  px(x,C.capHi,4,2,3,1);
+  px(x,C.capLo,3,4,10,1);
+  px(x,C.capMid,1,4,2,1); px(x,C.capLo,1,5,2,1);       /* brim */
+  /* shirt and arms */
+  px(x,C.skinLo,6,11,4,1);
+  px(x,C.clothMid,3,12,10,3); px(x,C.clothHi,4,12,6,1); px(x,C.clothLo,3,14,10,1);
+  px(x,C.clothMid,1,12,2,4);  px(x,C.clothMid,13,12,2,4);
+  px(x,C.skinMid,1,16,2,2);   px(x,C.skinMid,13,16,2,2);
+  /* dungarees */
+  px(x,C.denimMid,5,12,2,3);  px(x,C.denimMid,9,12,2,3);   /* straps */
+  px(x,C.denimMid,4,15,8,4);  px(x,C.denimHi,5,15,2,1);
+  px(x,C.denimLo,4,18,8,1);
+  px(x,C.diskYMid,7,16,2,2);                               /* buckle */
+  /* legs and shoes */
+  px(x,C.denimMid,4,19,3,3);  px(x,C.denimMid,9,19,3,3);
+  px(x,C.denimLo,4,21,3,1);   px(x,C.denimLo,9,21,3,1);
+  px(x,C.shoeMid,2,22,5,2);   px(x,C.shoeMid,9,22,5,2);
+  px(x,C.hairLo,2,23,5,1);    px(x,C.hairLo,9,23,5,1);
+  return c;
+}
 function makeKoopa(hi,mid,lo){
   const {c,x}=surface(16,24);
   px(x,mid,1,10,14,10); px(x,hi,2,9,12,2); px(x,lo,1,18,14,2);
@@ -584,6 +647,7 @@ const STAMPS = {
   FLAG:{name:'Flagpole',w:2,h:10,img:makeFlag(),tint:'#88B888',unique:true},
 };
 const ACTORS = {
+  PLAYER:{name:'The boy',img:makePlayer(),tiles:2,tint:'#C42818',ledge:'none',unique:true},
   GOOMBA:{name:'Goomba',img:makeGoomba(),tiles:1,tint:'#C87840',ledge:'fall'},
   KOOPA_G:{name:'Green koopa',img:makeKoopa(C.shellGHi,C.shellGMid,C.shellGLo),
            tiles:2,tint:'#2E9E30',ledge:'fall'},
@@ -593,6 +657,70 @@ const ACTORS = {
            tiles:2,tint:'#6C6C7C',ledge:'none'},
 };
 for(const a of Object.values(ACTORS)) a.imgR=mirror(a.img);
+
+/* ===================================================================
+   BUTTON ICONS
+   Drawn the same way as the sprites — fillRect into an off-screen
+   canvas — so the controls read as part of the same artwork and the
+   no-asset-files rule still holds.
+   =================================================================== */
+function ring(x,col,cx,cy,rIn,rOut,keep){
+  for(let Y=0;Y<16;Y++) for(let X=0;X<16;X++){
+    const dx=X-cx, dy=Y-cy, d=Math.sqrt(dx*dx+dy*dy);
+    if(d>=rIn&&d<=rOut&&keep(dx,dy)) px(x,col,X,Y);
+  }
+}
+function makeIconPlay(){
+  const {c,x}=surface(16,16);
+  const span=Y=>Math.floor(Math.sqrt(Math.max(0,56-(Y-7.5)*(Y-7.5))));
+  for(let Y=0;Y<16;Y++){ const k=span(Y); if(k) px(x,C.goMid,8-k,Y,k*2,1); }
+  for(let Y=1;Y<6;Y++){ const k=span(Y); if(k>1) px(x,C.goHi,9-k,Y,k*2-2,1); }
+  for(let Y=11;Y<15;Y++){ const k=span(Y); if(k>1) px(x,C.goLo,9-k,Y,k*2-2,1); }
+  for(let X=0;X<5;X++){ const h=10-X*2; px(x,C.cloudHi,6+X,3+X,1,h); }
+  return c;
+}
+/* Undo: a shaft that curls up and back on itself, head pointing left.
+   Redo is the same drawing mirrored, so the pair can never drift. */
+function makeIconUndo(){
+  const {c,x}=surface(16,16);
+  ring(x,C.inkIcon,8,9,3.4,5.6,(dx,dy)=>dy<=0||dx>=0);
+  px(x,C.inkIcon,2,9,3,2);                       /* tail into the head */
+  for(let i=0;i<5;i++) px(x,C.inkIcon,2+i,6+i,2,2-0);  /* arrowhead */
+  for(let i=0;i<4;i++) px(x,C.inkIcon,2,7+i,5-i,1);
+  return c;
+}
+function makeIconDisk(hi,mid,lo){
+  const {c,x}=surface(16,16);
+  px(x,mid,1,1,14,14);
+  px(x,hi,1,1,14,1); px(x,hi,1,1,1,14);
+  px(x,lo,1,14,14,1); px(x,lo,14,1,1,14);
+  px(x,C.diskShut,5,1,6,6);                      /* metal shutter */
+  px(x,C.diskShutLo,5,6,6,1); px(x,C.diskShutLo,5,1,1,6);
+  px(x,lo,8,2,2,4);                              /* shutter window */
+  px(x,C.diskLabel,3,9,10,5);                    /* paper label */
+  px(x,lo,4,10,8,1); px(x,lo,4,12,6,1);
+  return c;
+}
+/* Both strokes span the same columns and mirror each other, so the cross
+   sits square in the tile instead of leaning. */
+function crossOut(x){
+  for(let i=0;i<12;i++){ px(x,C.noMid,2+i,2+i,2,2); px(x,C.noMid,13-i,2+i,2,2); }
+  for(let i=0;i<12;i++){ px(x,C.noHi,2+i,2+i,1,1); px(x,C.noHi,14-i,2+i,1,1); }
+}
+function makeIconTreeX(){
+  const {c,x}=surface(16,16);
+  px(x,C.leafMid,3,1,10,7); px(x,C.leafHi,4,1,7,2); px(x,C.leafLo,3,7,10,1);
+  px(x,C.bark,7,8,2,7); px(x,C.barkLo,7,8,1,7);
+  crossOut(x);
+  return c;
+}
+function makeIconCloudX(){
+  const {c,x}=surface(16,16);
+  px(x,C.cloudHi,1,7,14,5); px(x,C.cloudHi,3,5,9,3); px(x,C.cloudHi,6,3,5,3);
+  px(x,C.cloudLo,1,11,14,1); px(x,C.cloudEdge,1,12,14,1);
+  crossOut(x);
+  return c;
+}
 
 /* ---------- families ---------- */
 const box=(x0,x1,y0,y1,mat)=>{
@@ -622,6 +750,7 @@ const TOOLS = [
   {key:'6',kind:'stamp',id:'CLOUD',name:'Cloud',note:'3×2'},
   {key:'c',kind:'stamp',id:'CASTLE',name:'Castle',note:'start · 1 only'},
   {key:'f',kind:'stamp',id:'FLAG',name:'Flagpole',note:'end · 1 only'},
+  {key:'p',kind:'actor',id:'PLAYER',name:'The boy',note:'start · 1 only'},
   {key:'7',kind:'actor',id:'GOOMBA',name:'Goomba',note:'walks off'},
   {key:'8',kind:'actor',id:'KOOPA_G',name:'Green koopa',note:'walks off'},
   {key:'9',kind:'actor',id:'KOOPA_R',name:'Red koopa',note:'turns at edge'},
@@ -785,6 +914,24 @@ function snapMaterial(plane,mat,col,row){
   list.push({t:'shape',fam:MAT_HOME[mat],ax:col,ay:row,cells:new Map([[ck(0,0),mat]])});
   return true;
 }
+/* The boy starts at the castle. Dropping a castle into a level that has no
+   boy yet stands him just outside its gate, facing into the track; after
+   that he is an ordinary actor and can be picked up and put anywhere. */
+function castleItem(){
+  for(const p of PLANES){
+    const it=track[p].find(i=>i.t==='stamp'&&i.id==='CASTLE');
+    if(it) return it;
+  }
+  return null;
+}
+function spawnBoyAtCastle(){
+  if(track.actors.some(a=>a.id==='PLAYER')) return false;
+  const gate=castleItem();
+  track.actors.push({t:'actor',id:'PLAYER',
+    ax:gate?Math.min(COLS-1,gate.ax+3):2,
+    ay:gate?gate.ay:GROUND_ROW-1, dir:1});
+  return true;
+}
 function placeStamp(plane,id,col,row){
   if(STAMPS[id].unique)
     for(const p of PLANES)
@@ -796,11 +943,20 @@ function placeStamp(plane,id,col,row){
   list.push({t:'stamp',id,
     ax:Math.max(sAncCol(id),Math.min(COLS-1-(sW(id)-1-sAncCol(id)),col)),
     ay:Math.max(sAncRow(id),Math.min(ROWS-1,row))});
+  if(id==='CASTLE') spawnBoyAtCastle();
   return true;
 }
 function placeActor(id,col,row){
   if(!inBounds(col,row)) return false;
   const list=track.actors;
+  /* A level has one start. Placing the boy again moves him rather than
+     making a second one — but clicking the cell he already occupies still
+     turns him round, the same as every other actor. */
+  if(ACTORS[id].unique){
+    const at=list.findIndex(i=>i.id===id&&i.ax===col&&i.ay===row);
+    if(at>=0){ mutable(list,at).dir*=-1; return true; }
+    for(let i=list.length-1;i>=0;i--) if(list[i].id===id) list.splice(i,1);
+  }
   const dup=list.findIndex(i=>i.ax===col&&i.ay===row);
   if(dup>=0){
     if(list[dup].id===id){ mutable(list,dup).dir*=-1; return true; }
@@ -1612,7 +1768,10 @@ function unpackItem(o){
   }
   return null;
 }
-function serialize(){
+/* One writer for every save. A single level and a single playlist come out
+   in the same format as the whole project, so anything saved here imports
+   straight back through the same reader. */
+function serialize(levels=project.levels, playlists=project.playlists){
   return {
     format:'onelane-design', version:6,
     project:document.getElementById('projName').value.trim()||'UNTITLED',
@@ -1620,9 +1779,9 @@ function serialize(){
     flair:{...FLAIR},
     behaviours:Object.fromEntries(Object.entries(ACTORS).map(([k,a])=>[k,{ledge:a.ledge}])),
     constructs:project.constructs,
-    levels:project.levels.map(l=>({id:l.id,name:l.name,
+    levels:levels.map(l=>({id:l.id,name:l.name,
       layers:{bg:l.bg.map(packItem),fg:l.fg.map(packItem),actors:l.actors.map(packItem)}})),
-    playlists:project.playlists.map(p=>({name:p.name,levels:p.levels}))
+    playlists:playlists.map(p=>({name:p.name,levels:p.levels}))
   };
 }
 function deserialize(data){
@@ -1729,6 +1888,59 @@ document.getElementById('btnClearLayer').onclick=()=>{
   say(`Cleared ${PLANE_LABEL[ed.plane].toLowerCase()} plane`); sfx('erase'); };
 document.getElementById('btnClear').onclick=()=>{
   pushUndo(); PLANES.forEach(p=>track[p]=[]); draw(); say('Level cleared'); sfx('erase'); };
+
+/* ---------- the diskettes: save one level, save one playlist ---------- */
+document.getElementById('btnLevelSave').onclick=()=>{
+  const lv=project.levels[curLevel];
+  const d=serialize([lv],[]);
+  download(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}),
+    safeName(lv.name)+'.level.json');
+  say(`Saved level “${lv.name}”`); sfx('save');
+};
+document.getElementById('btnPlaySave').onclick=()=>{
+  if(curPlaylist<0){ say('Pick a playlist first'); sfx('nope'); return; }
+  const pl=project.playlists[curPlaylist];
+  const lvls=pl.levels
+    .map(id=>project.levels.find(l=>l.id===id)).filter(Boolean);
+  if(!lvls.length){ say(`“${pl.name}” has no levels in it yet`); sfx('nope'); return; }
+  const d=serialize(lvls,[pl]);
+  download(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}),
+    safeName(pl.name)+'.playlist.json');
+  say(`Saved playlist “${pl.name}” and its ${lvls.length} level${lvls.length>1?'s':''}`);
+  sfx('save');
+};
+
+/* ---------- play ----------
+   The engine is the next piece of work. Until it lands this checks that
+   the level is actually playable and says what is missing, rather than
+   pretending to start something. */
+document.getElementById('btnPlay').onclick=()=>{
+  const boy=track.actors.find(a=>a.id==='PLAYER');
+  const flag=PLANES.some(p=>track[p].some(i=>i.t==='stamp'&&i.id==='FLAG'));
+  if(!boy){ say('No start point yet — place the boy (P), or drop a castle and he appears at its gate'); sfx('nope'); return; }
+  if(!flag){ say('No flagpole yet — the level has no finish'); sfx('nope'); return; }
+  say(`“${track.name}” is ready to play: the boy starts at column ${boy.ax}. The runtime is not built yet.`);
+  sfx('nope');
+};
+
+/* ---------- icons on the controls ---------- */
+function iconify(id,art,label){
+  const b=document.getElementById(id); if(!b) return;
+  const cv=document.createElement('canvas');
+  cv.width=art.width; cv.height=art.height; cv.className='ico';
+  cv.getContext('2d').drawImage(art,0,0);
+  cv.setAttribute('aria-hidden','true');
+  b.prepend(cv);
+  if(label) b.title=label;
+}
+const ICON_UNDO=makeIconUndo();
+iconify('btnPlay',makeIconPlay(),'Play this level');
+iconify('btnUndo',ICON_UNDO,'Undo the last edit');
+iconify('btnRedo',mirror(ICON_UNDO),'Redo the last undone edit');
+iconify('btnLevelSave',makeIconDisk(C.diskYHi,C.diskYMid,C.diskYLo),'Save this level to a file');
+iconify('btnPlaySave',makeIconDisk(C.diskBHi,C.diskBMid,C.diskBLo),'Save this playlist to a file');
+iconify('btnClearLayer',makeIconTreeX(),'Erase everything on the active plane');
+iconify('btnClear',makeIconCloudX(),'Erase everything in the level');
 
 /* ---------- boot ---------- */
 document.getElementById('rulerEnd').textContent='End '+(COLS-1);

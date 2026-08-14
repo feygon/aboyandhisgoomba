@@ -173,15 +173,22 @@ built-in default.
 
 ## 6. Actors
 
-> **In short:** four enemy types. The two koopas differ only in what they do
-> at a ledge.
+> **In short:** the boy, plus four enemy types. The two koopas differ only in
+> what they do at a ledge.
 
 | Actor | At a ledge | Height |
 |---|---|---|
+| The boy | n/a | 2 tiles |
 | Goomba | Walks off | 1 tile |
 | Green koopa | Walks off | 2 tiles |
 | Red koopa | Turns around | 2 tiles |
 | Blaster | n/a | 1–6 tiles |
+
+**The boy** is the player's start point, and a level has exactly one. Drop a
+castle into a level that has no boy and he appears at its gate facing into
+the track. After that he is an ordinary actor: place him anywhere with `P`,
+and clicking the cell he already stands on turns him round. Placing him
+somewhere new *moves* him rather than making a second one.
 
 The green and red koopas share one drawing routine with a swapped shell
 palette. The only real difference is the `ledge` flag — exactly as it is in
@@ -307,6 +314,7 @@ Mute with the button in the header.
 | `F` | Flagpole |
 | `7`–`9` | Goomba, Green koopa, Red koopa |
 | `B` | Blaster |
+| `P` | The boy (start point) |
 | `Q` `W` `E` `R` `U` `T` `Y` | Leaf, Mound, Trunk, Brick, Merlon, Turf, Earth bits |
 | `0` | Eraser |
 | `Shift` + `1`–`8` | Pick a construct slot |
@@ -349,6 +357,20 @@ There is **no autosave**. Nothing is written to browser storage.
 
 Use **Export project** to download a JSON file. Use **Import project** to
 load it back.
+
+Three buttons write files, and they all write the same format, so anything
+saved here loads back through **Import project**:
+
+| Button | Writes |
+|---|---|
+| **Export project** | Everything — all levels, all playlists, all constructs |
+| **Save level** (yellow diskette) | Just the level you are looking at |
+| **Save playlist** (blue diskette) | The current playlist and the levels in it |
+
+**The Constructs panel's `S` button is a different kind of save.** It stores
+the shape under the cursor in one of eight reusable slots, in memory. It
+writes nothing to disk. It is labelled **To slot** to keep the two apart —
+until you export, a captured construct is as unsaved as everything else.
 
 **Level PNG** exports the current level as a single 4096 × 192 image.
 
