@@ -82,9 +82,10 @@ Ported as written from `structure-notes.py`, pixels per frame at 60 Hz,
   `structure-notes.py`.
 - **R-6** The camera follows the boy in both directions, clamped to
   `[0, COLS*TILE − 256]`.
-  *Deviation from SMB, deliberate:* SMB never scrolls back. Here backtracking
-  is allowed — the level is a sandbox the child built and wants to look at,
-  and trapping them past their own castle punishes without teaching.
+  *Deviation from SMB, deliberate — confirmed by the author 2026-08-14:* SMB
+  never scrolls back. Here backtracking is allowed — the level is a sandbox
+  the child built and wants to look at, and trapping them past their own
+  castle punishes without teaching. Do not "fix" this toward the genre.
 - **R-7** Scrolling is pixel-smooth, not column-quantised. The runtime renders
   the visible column span into a buffer one tile wider than the screen and
   blits at `−(camX mod TILE)`.
