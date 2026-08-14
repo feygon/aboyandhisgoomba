@@ -932,17 +932,47 @@ function spawnBoyAtCastle(){
     ay:gate?gate.ay:GROUND_ROW-1, dir:1});
   return true;
 }
+/* The castle is the start and the flagpole is the finish, so a finish placed
+   behind the start is not a level anyone can win. Keep MIN_RUN clear columns
+   between them. The piece being placed slides to the nearest legal column
+   rather than the press being ignored — a five-year-old should always see his
+   action do something, and a silent no-op reads as a broken button. */
+const MIN_RUN=12;
+const stampLeft =it=>it.ax-sAncCol(it.id);
+const stampRight=it=>it.ax+(sW(it.id)-1-sAncCol(it.id));
+function findStamp(id){
+  for(const p of PLANES){
+    const it=track[p].find(i=>i.t==='stamp'&&i.id===id);
+    if(it) return it;
+  }
+  return null;
+}
 function placeStamp(plane,id,col,row){
+  const lo=sAncCol(id), hi=COLS-1-(sW(id)-1-sAncCol(id));
+  let ax=Math.max(lo,Math.min(hi,col));
+  const ay=Math.max(sAncRow(id),Math.min(ROWS-1,row));
+  /* Validate BEFORE the unique-removal below, or a refused placement would
+     delete the landmark it was meant to move and leave nothing behind. */
+  if(id==='FLAG'||id==='CASTLE'){
+    const other=findStamp(id==='FLAG'?'CASTLE':'FLAG');
+    if(other){
+      ax = id==='FLAG'
+        ? Math.max(ax, stampRight(other)+MIN_RUN+sAncCol(id))
+        : Math.min(ax, stampLeft(other)-MIN_RUN-(sW(id)-1-sAncCol(id)));
+      if(ax<lo||ax>hi){
+        say(`No room — the ${id==='FLAG'?'castle':'flagpole'} is too close to the end of the track. Move it first.`);
+        sfx('nope'); return false;
+      }
+    }
+  }
   if(STAMPS[id].unique)
     for(const p of PLANES)
       for(let i=track[p].length-1;i>=0;i--)
         if(track[p][i].t==='stamp'&&track[p][i].id===id) track[p].splice(i,1);
   const list=track[plane];
-  const dup=list.findIndex(i=>i.t==='stamp'&&i.ax===col&&i.ay===row);
+  const dup=list.findIndex(i=>i.t==='stamp'&&i.ax===ax&&i.ay===ay);
   if(dup>=0){ if(list[dup].id===id) return false; list.splice(dup,1); }
-  list.push({t:'stamp',id,
-    ax:Math.max(sAncCol(id),Math.min(COLS-1-(sW(id)-1-sAncCol(id)),col)),
-    ay:Math.max(sAncRow(id),Math.min(ROWS-1,row))});
+  list.push({t:'stamp',id,ax,ay});
   if(id==='CASTLE') spawnBoyAtCastle();
   return true;
 }

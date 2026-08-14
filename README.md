@@ -215,6 +215,17 @@ A **castle** marks the start. A **flagpole** marks the end.
 Both are unique. Placing a second one moves the first rather than creating a
 duplicate.
 
+**The flagpole always stays at least 12 columns to the right of the castle.**
+A finish behind the start is not a level anyone can win, so the editor will
+not build one. Place either landmark too close to the other and it slides to
+the nearest legal column rather than the click being ignored — you always see
+the piece land somewhere. The rule works both ways: dragging the castle
+rightwards pushes it no further than 12 columns short of the flag.
+
+If one landmark is jammed against the end of the track and the other has
+nowhere legal to go, the editor says so and leaves what you already have
+alone.
+
 A new level starts with the castle near column 3 and the flagpole near column
 248. Move them wherever you like.
 
