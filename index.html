@@ -101,7 +101,9 @@
     background:var(--sky);cursor:crosshair;touch-action:none}
   #view:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
   #ruler{display:block;width:100%;height:40px;image-rendering:pixelated;margin-top:10px;
-    border:2px solid var(--ink);background:var(--paper-2);cursor:pointer}
+    border:2px solid var(--ink);background:var(--paper-2);cursor:grab;touch-action:none}
+  #ruler.dragging{cursor:grabbing}
+  #view.panning{cursor:grabbing}
   .ruler-legend{display:flex;justify-content:space-between;font-size:10px;
     letter-spacing:.12em;color:var(--ink-2);margin-top:3px}
 
@@ -211,10 +213,10 @@
       </div>
 
       <canvas id="view" width="256" height="192" tabindex="0"
-        aria-label="Track editor. Arrows move, letter and number keys pick pieces, Space places, Tab changes plane, Control Z undoes."></canvas>
+        aria-label="Track editor. Arrows move, letter and number keys pick pieces, Space places, Tab changes plane, Control Z undoes. Middle mouse button drags to pan, wheel zooms."></canvas>
 
       <canvas id="ruler" width="256" height="40" tabindex="0"
-        aria-label="Whole track overview. Click to jump to a column."></canvas>
+        aria-label="Whole track overview. Click to jump to a column, or hold and drag to scrub along the track."></canvas>
       <div class="ruler-legend">
         <span>Start 0</span><span>Back above · front below · actors marked</span><span id="rulerEnd">End 255</span>
       </div>
@@ -264,6 +266,7 @@
         <span><kbd>[</kbd><kbd>]</kbd> height</span>
         <span><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo</span>
         <span><kbd>Alt</kbd>+erase ground digs the column</span>
+        <span>Wheel zooms · middle-drag pans · drag the strip to scrub</span>
       </div>
       <p id="status" role="status" aria-live="polite"></p>
     </main>
@@ -1041,7 +1044,8 @@ document.getElementById('btnMute').onclick=e=>{
 /* ---------- editor state ---------- */
 const ed={camCol:0,curCol:0,curRow:GROUND_ROW-1,viewCols:16,
   plane:'fg',tool:'family:BRICK',lastFamily:'BRICK',
-  painting:false,paintErase:false,lastCell:''};
+  painting:false,paintErase:false,lastCell:'',
+  scrubbing:false,panning:false,panX:0,panCam:0};
 
 /* ---------- render ---------- */
 const view=document.getElementById('view');
@@ -1446,8 +1450,16 @@ function stamp(col,row,erase,alt){
   return ok;
 }
 view.addEventListener('contextmenu',e=>e.preventDefault());
+/* Middle button is the only one left: left paints, right erases. */
+view.addEventListener('auxclick',e=>{ if(e.button===1) e.preventDefault(); });
 view.addEventListener('pointerdown',e=>{
   Audio_.init(); view.focus(); view.setPointerCapture(e.pointerId);
+  if(e.button===1){                      /* grab the track and slide it */
+    e.preventDefault();
+    ed.panning=true; ed.panX=e.clientX; ed.panCam=ed.camCol;
+    view.classList.add('panning');
+    return;
+  }
   const {col,row}=cellFromEvent(e);
   ed.curCol=col; ed.curRow=row; ed.painting=true;
   ed.paintErase=(e.button===2)||e.shiftKey;
@@ -1456,6 +1468,11 @@ view.addEventListener('pointerdown',e=>{
   stamp(col,row,ed.paintErase,e.altKey); draw();
 });
 view.addEventListener('pointermove',e=>{
+  if(ed.panning){
+    const pxPerCol=view.getBoundingClientRect().width/ed.viewCols;
+    scrollTo(Math.round(ed.panCam+(ed.panX-e.clientX)/pxPerCol));
+    draw(); return;
+  }
   const {col,row}=cellFromEvent(e);
   if(col===ed.curCol&&row===ed.curRow) return;
   ed.curCol=col; ed.curRow=row;
@@ -1467,7 +1484,10 @@ view.addEventListener('pointermove',e=>{
   }
   draw();
 });
-const stopPaint=()=>{ed.painting=false;};
+const stopPaint=()=>{
+  ed.painting=false;
+  if(ed.panning){ ed.panning=false; view.classList.remove('panning'); }
+};
 view.addEventListener('pointerup',stopPaint);
 view.addEventListener('pointercancel',stopPaint);
 window.addEventListener('blur',stopPaint);
@@ -1523,15 +1543,48 @@ window.addEventListener('keydown',e=>{
   }
   e.preventDefault(); draw();
 });
-ruler.addEventListener('pointerdown',e=>{
+/* Overview strip: press to jump, hold and drag to scrub the whole track. */
+function rulerSeek(e){
   const r=ruler.getBoundingClientRect();
   const col=Math.round(((e.clientX-r.left)/r.width)*COLS);
   ed.curCol=Math.max(0,Math.min(COLS-1,col));
   scrollTo(ed.curCol-Math.floor(ed.viewCols/2)); draw();
+}
+ruler.addEventListener('pointerdown',e=>{
+  ruler.setPointerCapture(e.pointerId);
+  ed.scrubbing=true; ruler.classList.add('dragging');
+  rulerSeek(e);
 });
+ruler.addEventListener('pointermove',e=>{ if(ed.scrubbing) rulerSeek(e); });
+const stopScrub=()=>{ ed.scrubbing=false; ruler.classList.remove('dragging'); };
+ruler.addEventListener('pointerup',stopScrub);
+ruler.addEventListener('pointercancel',stopScrub);
+window.addEventListener('blur',stopScrub);
+
 document.querySelectorAll('.zoom button').forEach(b=>{
   b.onclick=()=>{ setViewCols(+b.dataset.cols); draw(); };
 });
+
+/* Zoom presets read from the View buttons, so the two can never disagree. */
+const ZOOM_STEPS=[...document.querySelectorAll('.zoom button')]
+  .map(b=>+b.dataset.cols).sort((a,b)=>a-b);
+
+/* Wheel zooms, anchored on the column under the pointer so the tile you are
+   pointing at stays put instead of the view recentring under you. */
+view.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const i=ZOOM_STEPS.indexOf(ed.viewCols);
+  const from=i<0?0:i;
+  const ni=Math.max(0,Math.min(ZOOM_STEPS.length-1,from+(e.deltaY<0?-1:1)));
+  if(ni===from&&i>=0) return;
+  const r=view.getBoundingClientRect();
+  const frac=(e.clientX-r.left)/r.width;
+  const anchor=ed.camCol+frac*ed.viewCols;
+  setViewCols(ZOOM_STEPS[ni]);
+  scrollTo(Math.round(anchor-frac*ed.viewCols));
+  draw();
+  say(`View ${ZOOM_STEPS[ni]} columns`);
+},{passive:false});
 
 /* ---------- save / load ---------- */
 function packItem(it){

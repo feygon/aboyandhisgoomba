@@ -333,7 +333,13 @@ Mute with the button in the header.
 - **Click** places. **Drag** paints, but only with 1×1 bits — dragging a
   whole construct would carpet the track.
 - **Right-click** erases. **Right-drag** erases continuously.
-- **Click the ruler** to jump to that column.
+- **Click the ruler** to jump to that column, or **hold and drag along it**
+  to scrub the whole track.
+- **Middle-drag** on the canvas pans. You grab the track and slide it, the
+  way a hand tool works.
+- **Wheel** zooms through the same four view widths as the View buttons —
+  12, 16, 24, 32 columns. It zooms around the column under the pointer, so
+  the tile you are pointing at stays put.
 
 ---
 

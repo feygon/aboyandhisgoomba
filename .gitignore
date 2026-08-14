@@ -6,3 +6,6 @@ node_modules/
 *.json
 !package.json
 *.png
+
+# tarball the project was delivered in
+*.tar.gz
